@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.*;
 public class ConvertController {
 
     @PostMapping("/create")
-    public String create(@RequestBody String url) {
+    public String createURL(@RequestBody String url) {
 
         //URLを引き取る
 
