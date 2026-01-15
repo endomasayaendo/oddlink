@@ -13,10 +13,10 @@ public class ConvertController {
 
         //変換後URLの作成
 
-        //元URLと変換後URLを対応させたデータをDBに格納
+        //元URLと変換後URLを対応させたデータをMapに格納
 
         //変換後URLを返却
-        
+
         return "";
     }
 }
