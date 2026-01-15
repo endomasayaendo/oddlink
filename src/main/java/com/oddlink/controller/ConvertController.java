@@ -15,8 +15,10 @@ public class ConvertController {
 
         //元URLと変換後URLを対応させたデータをMapに格納
 
-        //変換後URLを返却
+        //定数のダミーURL
 
-        return "";
+        //変換後URL(ダミーURL）を返却
+
+        ;
     }
 }
