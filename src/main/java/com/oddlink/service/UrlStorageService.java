@@ -27,4 +27,13 @@ public class UrlStorageService {
     public String findByShortCode(String shortCode) {
         return urlMap.get(shortCode);
     }
+
+    /**
+     * 短縮コードが既に存在するかチェックする
+     * @param shortCode 短縮コード
+     * @return 存在する場合はtrue
+     */
+    public boolean exists(String shortCode) {
+        return urlMap.containsKey(shortCode);
+    }
 }
