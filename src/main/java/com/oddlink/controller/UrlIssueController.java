@@ -25,7 +25,7 @@ public class UrlIssueController {
     @PostMapping("/issue")
     public String issueUrl(@RequestBody IssueRequest request) {
 
-        String originalUrl = request.getOriginalUrl();
+        String originalUrl = request.originalUrl();
 
         // ユニークなシュールフレーズを生成
         String shortCode = phraseGenerator.generatePhrase();
