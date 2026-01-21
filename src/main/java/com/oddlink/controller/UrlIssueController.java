@@ -1,20 +1,16 @@
 package com.oddlink.controller;
 
 import com.oddlink.dto.IssueRequest;
-import com.oddlink.entity.UrlMapping;
-import com.oddlink.repository.UrlMappingRepository;
-import com.oddlink.service.SurrealPhraseGenerator;
+import com.oddlink.service.UrlIssueService;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 public class UrlIssueController {
 
-    private final UrlMappingRepository urlMappingRepository;
-    private final SurrealPhraseGenerator phraseGenerator;
+    private final UrlIssueService urlIssueService;
 
-    public UrlIssueController(UrlMappingRepository urlMappingRepository, SurrealPhraseGenerator phraseGenerator) {
-        this.urlMappingRepository = urlMappingRepository;
-        this.phraseGenerator = phraseGenerator;
+    public UrlIssueController(UrlIssueService urlIssueService) {
+        this.urlIssueService = urlIssueService;
     }
 
     /**
@@ -24,18 +20,7 @@ public class UrlIssueController {
      */
     @PostMapping("/issue")
     public String issueUrl(@RequestBody IssueRequest request) {
-
-        String originalUrl = request.originalUrl();
-
-        // ユニークなシュールフレーズを生成
-        String shortCode = phraseGenerator.generatePhrase();
-
-        // 短縮コードと元URLの対応を保存
-        UrlMapping urlMapping = new UrlMapping();
-        urlMapping.setShortCode(shortCode);
-        urlMapping.setOriginalUrl(originalUrl);
-        urlMappingRepository.save(urlMapping);
-
+        String shortCode = urlIssueService.issue(request.originalUrl());
         return "http://localhost:8080/" + shortCode;
     }
 }

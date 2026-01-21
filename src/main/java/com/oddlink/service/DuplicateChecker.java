@@ -3,6 +3,9 @@ package com.oddlink.service;
 import com.oddlink.repository.UrlMappingRepository;
 import org.springframework.stereotype.Service;
 
+/**
+ * 重複チェックを行うクラス
+ */
 @Service
 public class DuplicateChecker {
 
