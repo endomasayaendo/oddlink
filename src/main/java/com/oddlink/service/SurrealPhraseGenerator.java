@@ -13,7 +13,14 @@ import java.util.Random;
 @Component
 public class SurrealPhraseGenerator {
 
+    private static final int MAX_GENERATION_ATTEMPTS = 10;
+
     private final Random random = new Random();
+    private final DuplicateChecker duplicateChecker;
+
+    public SurrealPhraseGenerator(DuplicateChecker duplicateChecker) {
+        this.duplicateChecker = duplicateChecker;
+    }
 
     private static final List<String> ADJECTIVES = List.of(
             "melting", "floating", "invisible", "dancing", "sleeping",
@@ -52,6 +59,25 @@ public class SurrealPhraseGenerator {
         return String.format("%s-%s-%s-to-%s-%s", adj1, noun1, verb, adj2, noun2);
     }
 
+    /**
+     * フレーズを生成する
+     * @return フレーズ
+     */
+    public String generatePhrase() {
+        for (int i = 0; i < MAX_GENERATION_ATTEMPTS; i++) {
+            String phrase = generate();
+            if (!duplicateChecker.isDuplicate(phrase)) {
+                return phrase;
+            }
+        }
+        throw new RuntimeException("Failed to generate unique phrase after " + MAX_GENERATION_ATTEMPTS + " attempts");
+    }
+
+    /**
+     * 単語リストからランダムに単語１つを抽出する
+     * @param list
+     * @return
+     */
     private String randomFrom(List<String> list) {
         return list.get(random.nextInt(list.size()));
     }

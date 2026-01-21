@@ -8,8 +8,6 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 public class UrlIssueController {
 
-    private static final int MAX_GENERATION_ATTEMPTS = 10;
-
     private final UrlStorageService urlStorageService;
     private final SurrealPhraseGenerator phraseGenerator;
 
@@ -29,25 +27,11 @@ public class UrlIssueController {
         String originalUrl = request.getOriginalUrl();
 
         // ユニークなシュールフレーズを生成
-        String shortCode = generateUniquePhrase();
+        String shortCode = phraseGenerator.generatePhrase();
 
         // 短縮コードと元URLの対応を保存
         urlStorageService.save(shortCode, originalUrl);
 
         return "http://localhost:8080/" + shortCode;
-    }
-
-    /**
-     * 重複しないシュールフレーズを生成する
-     * @return ユニークなフレーズ
-     */
-    private String generateUniquePhrase() {
-        for (int i = 0; i < MAX_GENERATION_ATTEMPTS; i++) {
-            String phrase = phraseGenerator.generate();
-            if (!urlStorageService.exists(phrase)) {
-                return phrase;
-            }
-        }
-        throw new RuntimeException("Failed to generate unique phrase after " + MAX_GENERATION_ATTEMPTS + " attempts");
     }
 }
