@@ -1,14 +1,15 @@
 package com.oddlink.service;
 
+import com.oddlink.repository.UrlMappingRepository;
 import org.springframework.stereotype.Service;
 
 @Service
 public class DuplicateChecker {
 
-    private final UrlStorageService urlStorageService;
+    private final UrlMappingRepository urlMappingRepository;
 
-    public DuplicateChecker(UrlStorageService urlStorageService) {
-        this.urlStorageService = urlStorageService;
+    public DuplicateChecker(UrlMappingRepository urlMappingRepository) {
+        this.urlMappingRepository = urlMappingRepository;
     }
 
     /**
@@ -17,6 +18,6 @@ public class DuplicateChecker {
      * @return 重複している場合はtrue
      */
     public boolean isDuplicate(String phrase) {
-        return urlStorageService.exists(phrase);
+        return urlMappingRepository.existsByShortCode(phrase);
     }
 }

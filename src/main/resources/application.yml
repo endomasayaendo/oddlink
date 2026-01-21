@@ -1,0 +1,16 @@
+spring:
+  application:
+    name: oddlink
+
+  # PostgreSQL
+  datasource:
+    url: jdbc:postgresql://localhost:5432/oddlink
+    username: postgres
+    password: h101998720
+    driver-class-name: org.postgresql.Driver
+
+  # JPA
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: true
