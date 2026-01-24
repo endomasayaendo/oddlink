@@ -1,21 +1,18 @@
 package com.oddlink.controller;
 
-import com.oddlink.entity.UrlMapping;
-import com.oddlink.repository.UrlMappingRepository;
+import com.oddlink.service.UrlRedirectService;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.Optional;
-
 @RestController
 public class RedirectController {
 
-    private final UrlMappingRepository urlMappingRepository;
+    private final UrlRedirectService urlRedirectService;
 
-    public RedirectController(UrlMappingRepository urlMappingRepository) {
-        this.urlMappingRepository = urlMappingRepository;
+    public RedirectController(UrlRedirectService urlRedirectService) {
+        this.urlRedirectService = urlRedirectService;
     }
 
     /**
@@ -26,17 +23,12 @@ public class RedirectController {
     @GetMapping("/{shortCode}")
     public ResponseEntity<Void> redirect(@PathVariable String shortCode) {
 
-        //短縮コードから元のURLを取得
-        Optional<UrlMapping> urlMapping = urlMappingRepository.findByShortCode(shortCode);
-
-        if (urlMapping.isEmpty()) {
-            //URLが見つからない場合は404を返却
-            return ResponseEntity.notFound().build();
-        }
-
-        //元のURLにリダイレクト
-        HttpHeaders headers = new HttpHeaders();
-        headers.setLocation(java.net.URI.create(urlMapping.get().getOriginalUrl()));
-        return new ResponseEntity<>(headers, HttpStatus.FOUND);
+        return urlRedirectService.findOriginalUrl(shortCode)
+                .map(originalUrl -> {
+                    HttpHeaders headers = new HttpHeaders();
+                    headers.setLocation(java.net.URI.create(originalUrl));
+                    return new ResponseEntity<Void>(headers, HttpStatus.FOUND);
+                })
+                .orElseGet(() -> ResponseEntity.notFound().build());
     }
 }
