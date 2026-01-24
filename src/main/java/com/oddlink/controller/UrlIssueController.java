@@ -2,12 +2,19 @@ package com.oddlink.controller;
 
 import com.oddlink.dto.IssueRequest;
 import com.oddlink.service.UrlIssueService;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 public class UrlIssueController {
 
     private final UrlIssueService urlIssueService;
+
+    /**
+     * ベースURLをapplication.ymlから取得
+     */
+    @Value("${app.base-url}")
+    private String baseUrl;
 
     public UrlIssueController(UrlIssueService urlIssueService) {
         this.urlIssueService = urlIssueService;
@@ -21,6 +28,6 @@ public class UrlIssueController {
     @PostMapping("/issue")
     public String issueUrl(@RequestBody IssueRequest request) {
         String shortCode = urlIssueService.issue(request.originalUrl());
-        return "http://localhost:8080/" + shortCode;
+        return baseUrl + "/" + shortCode;
     }
 }
