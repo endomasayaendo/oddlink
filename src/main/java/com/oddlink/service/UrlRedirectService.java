@@ -22,6 +22,10 @@ public class UrlRedirectService {
     public Optional<String> findOriginalUrl(String shortCode) {
         return urlMappingRepository.findByShortCode(shortCode)
                 .filter(urlMapping -> !urlMapping.isExpired())
-                .map(urlMapping -> urlMapping.getOriginalUrl());
+                .map(urlMapping -> {
+                    urlMapping.incrementAccessCount();
+                    urlMappingRepository.save(urlMapping);
+                    return urlMapping.getOriginalUrl();
+                });
     }
 }

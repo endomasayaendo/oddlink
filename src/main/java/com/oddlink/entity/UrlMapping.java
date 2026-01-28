@@ -44,4 +44,8 @@ public class UrlMapping {
         }
         return LocalDateTime.now().isAfter(expiresAt);
     }
+
+    public void incrementAccessCount() {
+        this.accessCount++;
+    }
 }
