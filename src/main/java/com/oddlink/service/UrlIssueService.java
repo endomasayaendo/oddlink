@@ -4,6 +4,8 @@ import com.oddlink.entity.UrlMapping;
 import com.oddlink.repository.UrlMappingRepository;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
+
 /**
  * URL発行のビジネスロジックを担当するサービス
  */
@@ -29,6 +31,7 @@ public class UrlIssueService {
         UrlMapping urlMapping = new UrlMapping();
         urlMapping.setShortCode(shortCode);
         urlMapping.setOriginalUrl(originalUrl);
+        urlMapping.setExpiresAt(LocalDateTime.now().plusYears(1));
         urlMappingRepository.save(urlMapping);
 
         return shortCode;

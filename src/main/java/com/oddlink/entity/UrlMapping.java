@@ -37,4 +37,11 @@ public class UrlMapping {
     protected void onCreate() {
         createdAt = LocalDateTime.now();
     }
+
+    public boolean isExpired() {
+        if (expiresAt == null) {
+            return false;
+        }
+        return LocalDateTime.now().isAfter(expiresAt);
+    }
 }

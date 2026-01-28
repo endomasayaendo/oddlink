@@ -17,10 +17,11 @@ public class UrlRedirectService {
     /**
      * 短縮コードから元のURLを取得する
      * @param shortCode 短縮コード
-     * @return 元のURL（存在しない場合はEmpty）
+     * @return 元のURL（存在しない場合または有効期限切れの場合はEmpty）
      */
     public Optional<String> findOriginalUrl(String shortCode) {
         return urlMappingRepository.findByShortCode(shortCode)
+                .filter(urlMapping -> !urlMapping.isExpired())
                 .map(urlMapping -> urlMapping.getOriginalUrl());
     }
 }
