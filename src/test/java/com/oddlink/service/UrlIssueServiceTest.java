@@ -1,7 +1,6 @@
 package com.oddlink.service;
 
 import com.oddlink.entity.UrlMapping;
-import com.oddlink.repository.UrlMappingRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -30,7 +29,7 @@ class UrlIssueServiceTest {
     private PhraseSequenceService phraseSequenceService;
 
     @Mock
-    private UrlMappingRepository urlMappingRepository;
+    private UrlMappingSaveService urlMappingSaveService;
 
     @Captor
     private ArgumentCaptor<UrlMapping> urlMappingCaptor;
@@ -39,7 +38,7 @@ class UrlIssueServiceTest {
 
     @BeforeEach
     void setUp() {
-        urlIssueService = new UrlIssueService(phraseGenerator, phraseSequenceService, urlMappingRepository);
+        urlIssueService = new UrlIssueService(phraseGenerator, phraseSequenceService, urlMappingSaveService);
     }
 
     @Test
@@ -64,7 +63,7 @@ class UrlIssueServiceTest {
 
         urlIssueService.issue(originalUrl);
 
-        verify(urlMappingRepository).save(urlMappingCaptor.capture());
+        verify(urlMappingSaveService).save(urlMappingCaptor.capture());
         UrlMapping saved = urlMappingCaptor.getValue();
 
         assertThat(saved.getShortCode()).isEqualTo(shortCode);
@@ -80,7 +79,7 @@ class UrlIssueServiceTest {
 
         urlIssueService.issue("https://example.com");
 
-        verify(urlMappingRepository).save(urlMappingCaptor.capture());
+        verify(urlMappingSaveService).save(urlMappingCaptor.capture());
         UrlMapping saved = urlMappingCaptor.getValue();
 
         LocalDateTime expectedExpiration = beforeIssue.plusYears(1);
@@ -98,7 +97,7 @@ class UrlIssueServiceTest {
                 .thenReturn(2L);
         when(phraseGenerator.generate(1L)).thenReturn(duplicatePhrase);
         when(phraseGenerator.generate(2L)).thenReturn(uniquePhrase);
-        when(urlMappingRepository.save(any(UrlMapping.class)))
+        when(urlMappingSaveService.save(any(UrlMapping.class)))
                 .thenThrow(new DataIntegrityViolationException("Duplicate key"))
                 .thenReturn(new UrlMapping());
 
@@ -113,7 +112,7 @@ class UrlIssueServiceTest {
     void issue_throwsExceptionWhenMaxAttemptsExceeded() {
         when(phraseSequenceService.getNext()).thenReturn(1L);
         when(phraseGenerator.generate(anyLong())).thenReturn("always-duplicate-phrase");
-        when(urlMappingRepository.save(any(UrlMapping.class)))
+        when(urlMappingSaveService.save(any(UrlMapping.class)))
                 .thenThrow(new DataIntegrityViolationException("Duplicate key"));
 
         assertThatThrownBy(() -> urlIssueService.issue("https://example.com"))

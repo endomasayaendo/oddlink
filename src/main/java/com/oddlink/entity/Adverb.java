@@ -21,10 +21,6 @@ public class Adverb {
     @Column(nullable = false, unique = true, length = 50)
     private String word;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "word_type_id", nullable = false)
-    private WordType wordType;
-
     @Column(name = "is_active", nullable = false)
     private Boolean isActive = true;
 
@@ -45,8 +41,7 @@ public class Adverb {
         updatedAt = LocalDateTime.now();
     }
 
-    public Adverb(String word, WordType wordType) {
+    public Adverb(String word) {
         this.word = word;
-        this.wordType = wordType;
     }
 }

@@ -1,10 +1,8 @@
 package com.oddlink.service;
 
 import com.oddlink.entity.UrlMapping;
-import com.oddlink.repository.UrlMappingRepository;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 
@@ -18,15 +16,15 @@ public class UrlIssueService {
 
     private final SurrealPhraseGenerator phraseGenerator;
     private final PhraseSequenceService phraseSequenceService;
-    private final UrlMappingRepository urlMappingRepository;
+    private final UrlMappingSaveService urlMappingSaveService;
 
     public UrlIssueService(
             SurrealPhraseGenerator phraseGenerator,
             PhraseSequenceService phraseSequenceService,
-            UrlMappingRepository urlMappingRepository) {
+            UrlMappingSaveService urlMappingSaveService) {
         this.phraseGenerator = phraseGenerator;
         this.phraseSequenceService = phraseSequenceService;
-        this.urlMappingRepository = urlMappingRepository;
+        this.urlMappingSaveService = urlMappingSaveService;
     }
 
     /**
@@ -35,7 +33,6 @@ public class UrlIssueService {
      * @return 生成されたショートコード
      * @throws IllegalStateException 最大試行回数を超えてもユニークなフレーズを生成できなかった場合
      */
-    @Transactional
     public String issue(String originalUrl) {
         for (int attempt = 0; attempt < MAX_RETRY_ATTEMPTS; attempt++) {
             long sequence = phraseSequenceService.getNext();
@@ -47,10 +44,10 @@ public class UrlIssueService {
             urlMapping.setExpiresAt(LocalDateTime.now().plusYears(1));
 
             try {
-                urlMappingRepository.save(urlMapping);
+                urlMappingSaveService.save(urlMapping);
                 return shortCode;
             } catch (DataIntegrityViolationException e) {
-                // 衝突時は次のシーケンスで再試行（単語変更後の稀なケース）
+                // 衝突時は次のシーケンスで再試行（独立トランザクションなので問題なし）
             }
         }
 
