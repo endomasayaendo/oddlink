@@ -1,19 +1,20 @@
 -- ===========================================
--- 既存テーブル・シーケンスを全削除
--- ===========================================
-DROP TABLE IF EXISTS word_tags CASCADE;
-DROP TABLE IF EXISTS adjectives CASCADE;
-DROP TABLE IF EXISTS nouns CASCADE;
-DROP TABLE IF EXISTS verbs CASCADE;
-DROP TABLE IF EXISTS adverbs CASCADE;
-DROP TABLE IF EXISTS tags CASCADE;
-DROP TABLE IF EXISTS word_types CASCADE;
-DROP SEQUENCE IF EXISTS phrase_seq;
-
--- ===========================================
--- テーブル作成
+-- OddLink 初期スキーマ
 -- ===========================================
 
+-- URL Mappings
+CREATE TABLE url_mappings (
+    id BIGSERIAL PRIMARY KEY,
+    short_code VARCHAR(255) NOT NULL UNIQUE,
+    original_url TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL,
+    expires_at TIMESTAMP,
+    access_count BIGINT NOT NULL DEFAULT 0
+);
+
+CREATE INDEX idx_url_mappings_short_code ON url_mappings(short_code);
+
+-- Word Tables
 CREATE TABLE adjectives (
     id BIGSERIAL PRIMARY KEY,
     word VARCHAR(50) NOT NULL UNIQUE,
@@ -46,11 +47,11 @@ CREATE TABLE adverbs (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- Phrase sequence
+-- Phrase Sequence
 CREATE SEQUENCE phrase_seq START 1 CACHE 100;
 
 -- ===========================================
--- 初期データ投入
+-- Initial Data
 -- ===========================================
 
 INSERT INTO adjectives (word) VALUES
