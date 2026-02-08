@@ -1,0 +1,53 @@
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.result-card {
+  background: #f7f7f7;
+  padding: 1.5rem;
+  border-radius: 12px;
+  animation: fade-in-up 0.4s ease-out;
+}
+
+.result-card__label {
+  color: #666;
+  margin-bottom: 0.75rem;
+}
+
+.result-card__url-container {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.result-card__url {
+  color: #667eea;
+  font-size: 1.125rem;
+  font-weight: 600;
+  word-break: break-all;
+}
+
+.result-card__copy-button {
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  color: #667eea;
+  background: white;
+  border: 2px solid #667eea;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.result-card__copy-button:hover {
+  background: #667eea;
+  color: white;
+}
