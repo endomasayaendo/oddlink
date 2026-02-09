@@ -15,15 +15,12 @@ public class UrlIssueService {
     private static final int MAX_RETRY_ATTEMPTS = 5;
 
     private final SurrealPhraseGenerator phraseGenerator;
-    private final PhraseSequenceService phraseSequenceService;
     private final UrlMappingSaveService urlMappingSaveService;
 
     public UrlIssueService(
             SurrealPhraseGenerator phraseGenerator,
-            PhraseSequenceService phraseSequenceService,
             UrlMappingSaveService urlMappingSaveService) {
         this.phraseGenerator = phraseGenerator;
-        this.phraseSequenceService = phraseSequenceService;
         this.urlMappingSaveService = urlMappingSaveService;
     }
 
@@ -35,8 +32,7 @@ public class UrlIssueService {
      */
     public String issue(String originalUrl) {
         for (int attempt = 0; attempt < MAX_RETRY_ATTEMPTS; attempt++) {
-            long sequence = phraseSequenceService.getNext();
-            String shortCode = phraseGenerator.generate(sequence);
+            String shortCode = phraseGenerator.generate();
 
             UrlMapping urlMapping = new UrlMapping();
             urlMapping.setShortCode(shortCode);
@@ -47,7 +43,7 @@ public class UrlIssueService {
                 urlMappingSaveService.save(urlMapping);
                 return shortCode;
             } catch (DataIntegrityViolationException e) {
-                // 衝突時は次のシーケンスで再試行（独立トランザクションなので問題なし）
+                // 衝突時は再生成して再試行（独立トランザクションなので問題なし）
             }
         }
 

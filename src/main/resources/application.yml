@@ -1,19 +1,15 @@
 app:
   base-url: http://localhost:8080
 
-phrase:
-  security:
-    salt: ${PHRASE_SALT:0}
-
 spring:
   application:
     name: oddlink
 
   # PostgreSQL
   datasource:
-    url: jdbc:postgresql://localhost:5432/oddlink
-    username: postgres
-    password: h101998720
+    url: jdbc:postgresql://localhost:5432/${DB_NAME:oddlink}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:postgres}
     driver-class-name: org.postgresql.Driver
 
   # JPA

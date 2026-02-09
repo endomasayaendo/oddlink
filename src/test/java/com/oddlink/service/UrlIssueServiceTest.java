@@ -16,7 +16,6 @@ import java.time.LocalDateTime;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -24,9 +23,6 @@ class UrlIssueServiceTest {
 
     @Mock
     private SurrealPhraseGenerator phraseGenerator;
-
-    @Mock
-    private PhraseSequenceService phraseSequenceService;
 
     @Mock
     private UrlMappingSaveService urlMappingSaveService;
@@ -38,15 +34,14 @@ class UrlIssueServiceTest {
 
     @BeforeEach
     void setUp() {
-        urlIssueService = new UrlIssueService(phraseGenerator, phraseSequenceService, urlMappingSaveService);
+        urlIssueService = new UrlIssueService(phraseGenerator, urlMappingSaveService);
     }
 
     @Test
     @DisplayName("URLを発行すると、ショートコードが返される")
     void issue_returnsShortCode() {
         String expectedShortCode = "melting-clock-whispers-to-purple-elephant";
-        when(phraseSequenceService.getNext()).thenReturn(1L);
-        when(phraseGenerator.generate(1L)).thenReturn(expectedShortCode);
+        when(phraseGenerator.generate()).thenReturn(expectedShortCode);
 
         String result = urlIssueService.issue("https://example.com");
 
@@ -58,8 +53,7 @@ class UrlIssueServiceTest {
     void issue_savesCorrectMapping() {
         String shortCode = "melting-clock-whispers-to-purple-elephant";
         String originalUrl = "https://example.com";
-        when(phraseSequenceService.getNext()).thenReturn(1L);
-        when(phraseGenerator.generate(1L)).thenReturn(shortCode);
+        when(phraseGenerator.generate()).thenReturn(shortCode);
 
         urlIssueService.issue(originalUrl);
 
@@ -73,8 +67,7 @@ class UrlIssueServiceTest {
     @Test
     @DisplayName("発行されたURLの有効期限は約1年後に設定される")
     void issue_setsExpirationToOneYear() {
-        when(phraseSequenceService.getNext()).thenReturn(1L);
-        when(phraseGenerator.generate(1L)).thenReturn("test-phrase-with-to-words");
+        when(phraseGenerator.generate()).thenReturn("test-phrase-with-to-words");
         LocalDateTime beforeIssue = LocalDateTime.now();
 
         urlIssueService.issue("https://example.com");
@@ -92,11 +85,9 @@ class UrlIssueServiceTest {
     void issue_retriesOnDuplicate() {
         String duplicatePhrase = "duplicate-phrase-with-to-noun";
         String uniquePhrase = "unique-phrase-with-to-noun";
-        when(phraseSequenceService.getNext())
-                .thenReturn(1L)
-                .thenReturn(2L);
-        when(phraseGenerator.generate(1L)).thenReturn(duplicatePhrase);
-        when(phraseGenerator.generate(2L)).thenReturn(uniquePhrase);
+        when(phraseGenerator.generate())
+                .thenReturn(duplicatePhrase)
+                .thenReturn(uniquePhrase);
         when(urlMappingSaveService.save(any(UrlMapping.class)))
                 .thenThrow(new DataIntegrityViolationException("Duplicate key"))
                 .thenReturn(new UrlMapping());
@@ -104,14 +95,13 @@ class UrlIssueServiceTest {
         String result = urlIssueService.issue("https://example.com");
 
         assertThat(result).isEqualTo(uniquePhrase);
-        verify(phraseSequenceService, times(2)).getNext();
+        verify(phraseGenerator, times(2)).generate();
     }
 
     @Test
     @DisplayName("最大試行回数を超えた場合は例外がスローされる")
     void issue_throwsExceptionWhenMaxAttemptsExceeded() {
-        when(phraseSequenceService.getNext()).thenReturn(1L);
-        when(phraseGenerator.generate(anyLong())).thenReturn("always-duplicate-phrase");
+        when(phraseGenerator.generate()).thenReturn("always-duplicate-phrase");
         when(urlMappingSaveService.save(any(UrlMapping.class)))
                 .thenThrow(new DataIntegrityViolationException("Duplicate key"));
 
@@ -119,7 +109,6 @@ class UrlIssueServiceTest {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Failed to generate unique phrase");
 
-        // 最大5回の試行を確認
-        verify(phraseSequenceService, times(5)).getNext();
+        verify(phraseGenerator, times(5)).generate();
     }
 }

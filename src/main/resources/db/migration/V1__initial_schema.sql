@@ -47,9 +47,6 @@ CREATE TABLE adverbs (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- Phrase Sequence
-CREATE SEQUENCE phrase_seq START 1 CACHE 100;
-
 -- ===========================================
 -- Initial Data
 -- ===========================================
