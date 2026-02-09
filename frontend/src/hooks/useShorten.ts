@@ -24,8 +24,8 @@ export function useShorten() {
         throw new Error(errorData.message || 'Failed to shorten URL')
       }
 
-      const resultUrl = await response.text()
-      setShortUrl(resultUrl)
+      const data = await response.json()
+      setShortUrl(data.shortUrl)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong')
     } finally {

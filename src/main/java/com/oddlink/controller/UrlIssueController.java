@@ -1,6 +1,7 @@
 package com.oddlink.controller;
 
 import com.oddlink.dto.IssueRequest;
+import com.oddlink.dto.IssueResponse;
 import com.oddlink.service.UrlIssueService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Value;
@@ -27,8 +28,8 @@ public class UrlIssueController {
      * @return 発行された短縮URL
      */
     @PostMapping("/issue")
-    public String issueUrl(@Valid @RequestBody IssueRequest request) {
+    public IssueResponse issueUrl(@Valid @RequestBody IssueRequest request) {
         String shortCode = urlIssueService.issue(request.originalUrl());
-        return baseUrl + "/" + shortCode;
+        return new IssueResponse(baseUrl + "/" + shortCode);
     }
 }
