@@ -35,22 +35,24 @@ class RedirectControllerTest {
     }
 
     @Test
-    @DisplayName("存在しないショートコードで404が返される")
-    void redirect_returns404WhenNotFound() throws Exception {
+    @DisplayName("存在しないショートコードでNotFoundページにリダイレクトされる")
+    void redirect_redirectsToNotFoundPage() throws Exception {
         when(urlRedirectService.findOriginalUrl("nonexistent-code"))
                 .thenReturn(Optional.empty());
 
         mockMvc.perform(get("/nonexistent-code"))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isFound())
+                .andExpect(header().string("Location", "http://localhost:3000/not-found"));
     }
 
     @Test
-    @DisplayName("期限切れのショートコードで404が返される")
-    void redirect_returns404WhenExpired() throws Exception {
+    @DisplayName("期限切れのショートコードでNotFoundページにリダイレクトされる")
+    void redirect_redirectsToNotFoundWhenExpired() throws Exception {
         when(urlRedirectService.findOriginalUrl("expired-phrase-code"))
                 .thenReturn(Optional.empty());
 
         mockMvc.perform(get("/expired-phrase-code"))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isFound())
+                .andExpect(header().string("Location", "http://localhost:3000/not-found"));
     }
 }

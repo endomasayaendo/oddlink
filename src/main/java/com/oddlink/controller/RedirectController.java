@@ -1,15 +1,21 @@
 package com.oddlink.controller;
 
 import com.oddlink.service.UrlRedirectService;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.net.URI;
+
 @RestController
 public class RedirectController {
 
     private final UrlRedirectService urlRedirectService;
+
+    @Value("${app.frontend-url}")
+    private String frontendUrl;
 
     public RedirectController(UrlRedirectService urlRedirectService) {
         this.urlRedirectService = urlRedirectService;
@@ -26,9 +32,13 @@ public class RedirectController {
         return urlRedirectService.findOriginalUrl(shortCode)
                 .map(originalUrl -> {
                     HttpHeaders headers = new HttpHeaders();
-                    headers.setLocation(java.net.URI.create(originalUrl));
+                    headers.setLocation(URI.create(originalUrl));
                     return new ResponseEntity<Void>(headers, HttpStatus.FOUND);
                 })
-                .orElseGet(() -> ResponseEntity.notFound().build());
+                .orElseGet(() -> {
+                    HttpHeaders headers = new HttpHeaders();
+                    headers.setLocation(URI.create(frontendUrl + "/not-found"));
+                    return new ResponseEntity<>(headers, HttpStatus.FOUND);
+                });
     }
 }

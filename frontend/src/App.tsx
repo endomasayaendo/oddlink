@@ -1,6 +1,7 @@
 import './App.css'
 import { UrlForm } from './components/UrlForm'
 import { ResultCard } from './components/ResultCard'
+import { ErrorMessage } from './components/ErrorMessage'
 import { useShorten } from './hooks/useShorten'
 
 function App() {
@@ -13,7 +14,7 @@ function App() {
 
       <UrlForm onSubmit={shorten} loading={loading} />
 
-      {error && <p className="error">{error}</p>}
+      {error && <ErrorMessage message={error} onDismiss={() => setError('')} />}
 
       {shortUrl && <ResultCard shortUrl={shortUrl} onError={setError} />}
     </div>
