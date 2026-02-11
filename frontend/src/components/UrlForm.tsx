@@ -12,6 +12,7 @@ export function UrlForm({ onSubmit, loading }: Props) {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     onSubmit(originalUrl)
+    setOriginalUrl('')
   }
 
   return (

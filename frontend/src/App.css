@@ -1,5 +1,5 @@
 .container {
-  max-width: 600px;
+  max-width: 720px;
   margin: 0 auto;
   padding: 2rem;
   text-align: center;
@@ -17,4 +17,18 @@
 .subtitle {
   color: #666;
   margin-bottom: 2rem;
+}
+
+@media (max-width: 480px) {
+  .container {
+    padding: 1.5rem 1rem;
+  }
+
+  .title {
+    font-size: 2.25rem;
+  }
+
+  .subtitle {
+    font-size: 0.9rem;
+  }
 }

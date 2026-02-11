@@ -37,3 +37,17 @@
   transform: translateY(-1px);
   text-decoration: none;
 }
+
+@media (max-width: 480px) {
+  .not-found {
+    padding: 1.5rem 1rem;
+  }
+
+  .not-found__code {
+    font-size: 3.5rem;
+  }
+
+  .not-found__message {
+    font-size: 1rem;
+  }
+}

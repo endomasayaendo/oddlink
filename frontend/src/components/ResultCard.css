@@ -13,6 +13,7 @@
   background: #f7f7f7;
   padding: 1.5rem;
   border-radius: 12px;
+  text-align: center;
   animation: fade-in-up 0.4s ease-out;
 }
 
@@ -21,19 +22,12 @@
   margin-bottom: 0.75rem;
 }
 
-.result-card__url-container {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  justify-content: center;
-  flex-wrap: wrap;
-}
-
 .result-card__url {
+  display: block;
   color: #667eea;
-  font-size: 1.125rem;
+  font-size: 1rem;
   font-weight: 600;
-  word-break: break-all;
+  margin-bottom: 0.75rem;
 }
 
 .result-card__copy-button {
@@ -50,4 +44,18 @@
 .result-card__copy-button:hover {
   background: #667eea;
   color: white;
+}
+
+@media (max-width: 480px) {
+  .result-card {
+    padding: 1rem;
+  }
+
+  .result-card__url {
+    font-size: 0.7rem;
+  }
+
+  .result-card__copy-button {
+    width: 100%;
+  }
 }
