@@ -20,8 +20,12 @@ export function useShorten() {
       })
 
       if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.message || 'Failed to shorten URL')
+        let message = 'Failed to shorten URL'
+        try {
+          const errorData = await response.json()
+          if (errorData.message) message = errorData.message
+        } catch { /* レスポンスがJSONでない場合はデフォルトメッセージを使用 */ }
+        throw new Error(message)
       }
 
       const data = await response.json()
