@@ -28,7 +28,7 @@ class UrlIssueControllerTest {
         when(urlIssueService.issue("https://example.com"))
                 .thenReturn("melting-clock-whispers-to-purple-elephant");
 
-        mockMvc.perform(post("/issue")
+        mockMvc.perform(post("/api/issue")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"originalUrl\": \"https://example.com\"}"))
                 .andExpect(status().isOk())
@@ -39,7 +39,7 @@ class UrlIssueControllerTest {
     @Test
     @DisplayName("URLが空の場合はバリデーションエラーが返される")
     void issueUrl_returnsBadRequestWhenUrlIsBlank() throws Exception {
-        mockMvc.perform(post("/issue")
+        mockMvc.perform(post("/api/issue")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"originalUrl\": \"\"}"))
                 .andExpect(status().isBadRequest())
@@ -49,7 +49,7 @@ class UrlIssueControllerTest {
     @Test
     @DisplayName("不正なURL形式の場合はバリデーションエラーが返される")
     void issueUrl_returnsBadRequestWhenUrlIsInvalid() throws Exception {
-        mockMvc.perform(post("/issue")
+        mockMvc.perform(post("/api/issue")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"originalUrl\": \"not-a-url\"}"))
                 .andExpect(status().isBadRequest())
@@ -59,7 +59,7 @@ class UrlIssueControllerTest {
     @Test
     @DisplayName("リクエストボディが空の場合は400が返される")
     void issueUrl_returnsBadRequestWhenBodyIsEmpty() throws Exception {
-        mockMvc.perform(post("/issue")
+        mockMvc.perform(post("/api/issue")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
                 .andExpect(status().isBadRequest());
@@ -71,7 +71,7 @@ class UrlIssueControllerTest {
         when(urlIssueService.issue("https://example.com"))
                 .thenThrow(new IllegalStateException("Failed to generate unique phrase"));
 
-        mockMvc.perform(post("/issue")
+        mockMvc.perform(post("/api/issue")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"originalUrl\": \"https://example.com\"}"))
                 .andExpect(status().isServiceUnavailable())
