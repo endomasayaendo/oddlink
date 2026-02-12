@@ -76,8 +76,7 @@ public class WordCache {
                 .toList();
 
         if (adjectives.isEmpty() || nouns.isEmpty() || verbs.isEmpty() || adverbs.isEmpty()) {
-            throw new IllegalStateException("Word lis" +
-                    "ts cannot be empty");
+            throw new IllegalStateException("Word lists cannot be empty");
         }
     }
 
