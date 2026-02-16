@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import './index.css'
 import App from './App.tsx'
+import { Analytics } from './pages/Analytics.tsx'
 import { NotFound } from './pages/NotFound.tsx'
 
 createRoot(document.getElementById('root')!).render(
@@ -10,6 +11,7 @@ createRoot(document.getElementById('root')!).render(
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<App />} />
+        <Route path="/analytics/:shortCode" element={<Analytics />} />
         <Route path="/not-found" element={<NotFound />} />
       </Routes>
     </BrowserRouter>

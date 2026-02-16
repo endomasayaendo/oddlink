@@ -46,6 +46,13 @@
   color: white;
 }
 
+.result-card__analytics-link {
+  display: block;
+  margin-top: 0.75rem;
+  font-size: 0.875rem;
+  color: #667eea;
+}
+
 @media (max-width: 480px) {
   .result-card {
     padding: 1rem;

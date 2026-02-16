@@ -1,6 +1,8 @@
 package com.oddlink.service;
 
+import com.oddlink.entity.AccessLog;
 import com.oddlink.entity.UrlMapping;
+import com.oddlink.repository.AccessLogRepository;
 import com.oddlink.repository.UrlMappingRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -21,11 +23,14 @@ class UrlRedirectServiceTest {
     @Mock
     private UrlMappingRepository urlMappingRepository;
 
+    @Mock
+    private AccessLogRepository accessLogRepository;
+
     private UrlRedirectService urlRedirectService;
 
     @BeforeEach
     void setUp() {
-        urlRedirectService = new UrlRedirectService(urlMappingRepository);
+        urlRedirectService = new UrlRedirectService(urlMappingRepository, accessLogRepository);
     }
 
     @Test
@@ -76,6 +81,7 @@ class UrlRedirectServiceTest {
 
         assertThat(urlMapping.getAccessCount()).isEqualTo(6L);
         verify(urlMappingRepository).save(urlMapping);
+        verify(accessLogRepository).save(any(AccessLog.class));
     }
 
     @Test
@@ -90,6 +96,7 @@ class UrlRedirectServiceTest {
 
         assertThat(expiredMapping.getAccessCount()).isEqualTo(5L);
         verify(urlMappingRepository, never()).save(any());
+        verify(accessLogRepository, never()).save(any());
     }
 
     private UrlMapping createUrlMapping(String shortCode, String originalUrl, LocalDateTime expiresAt) {

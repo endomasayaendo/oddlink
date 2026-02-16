@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import './ResultCard.css'
 
 type Props = {
@@ -28,6 +29,9 @@ export function ResultCard({ shortUrl, onError }: Props) {
       <button onClick={handleCopy} className="result-card__copy-button">
         {copied ? 'Copied!' : 'Copy'}
       </button>
+      <Link to={`/analytics/${shortUrl.split('/').pop()}`} className="result-card__analytics-link">
+        View Analytics
+      </Link>
     </div>
   )
 }
