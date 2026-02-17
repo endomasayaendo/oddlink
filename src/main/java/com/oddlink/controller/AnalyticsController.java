@@ -2,6 +2,7 @@ package com.oddlink.controller;
 
 import com.oddlink.dto.AnalyticsResponse;
 import com.oddlink.service.AnalyticsService;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -16,6 +17,9 @@ public class AnalyticsController {
 
     private final AnalyticsService analyticsService;
 
+    @Value("${app.base-url}")
+    private String baseUrl;
+
     public AnalyticsController(AnalyticsService analyticsService) {
         this.analyticsService = analyticsService;
     }
@@ -27,6 +31,6 @@ public class AnalyticsController {
      */
     @GetMapping("/analytics/{shortCode}")
     public AnalyticsResponse getAnalytics(@PathVariable String shortCode) {
-        return analyticsService.getAnalytics(shortCode);
+        return analyticsService.getAnalytics(shortCode, baseUrl);
     }
 }

@@ -50,14 +50,24 @@ export function Analytics() {
         </Link>
       </div>
 
-      <a
-        href={data.originalUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="analytics__original-url"
-      >
-        {data.originalUrl}
-      </a>
+      <div className="analytics__urls">
+        <a
+          href={data.shortUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="analytics__short-url"
+        >
+          {data.shortUrl}
+        </a>
+        <a
+          href={data.originalUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="analytics__original-url"
+        >
+          {data.originalUrl}
+        </a>
+      </div>
 
       <div className="analytics__stats">
         <div className="analytics__stat-card">

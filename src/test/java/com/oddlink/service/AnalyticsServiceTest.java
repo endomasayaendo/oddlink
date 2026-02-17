@@ -56,9 +56,10 @@ class AnalyticsServiceTest {
         when(urlMappingRepository.findByShortCode(shortCode)).thenReturn(Optional.of(urlMapping));
         when(accessLogRepository.findDailyAccessCounts(urlMapping.getId())).thenReturn(dailyData);
 
-        AnalyticsResponse response = analyticsService.getAnalytics(shortCode);
+        AnalyticsResponse response = analyticsService.getAnalytics(shortCode, "http://localhost:8080");
 
         assertThat(response.shortCode()).isEqualTo(shortCode);
+        assertThat(response.shortUrl()).isEqualTo("http://localhost:8080/" + shortCode);
         assertThat(response.originalUrl()).isEqualTo("https://example.com");
         assertThat(response.totalAccessCount()).isEqualTo(10L);
         assertThat(response.createdAt()).isEqualTo(LocalDateTime.of(2025, 1, 1, 0, 0));
@@ -80,7 +81,7 @@ class AnalyticsServiceTest {
         when(urlMappingRepository.findByShortCode(shortCode)).thenReturn(Optional.of(urlMapping));
         when(accessLogRepository.findDailyAccessCounts(urlMapping.getId())).thenReturn(List.of());
 
-        AnalyticsResponse response = analyticsService.getAnalytics(shortCode);
+        AnalyticsResponse response = analyticsService.getAnalytics(shortCode, "http://localhost:8080");
 
         assertThat(response.dailyAccess()).isEmpty();
         assertThat(response.totalAccessCount()).isEqualTo(0L);
@@ -91,7 +92,7 @@ class AnalyticsServiceTest {
     void getAnalytics_whenShortCodeNotFound_throwsException() {
         when(urlMappingRepository.findByShortCode("nonexistent")).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> analyticsService.getAnalytics("nonexistent"))
+        assertThatThrownBy(() -> analyticsService.getAnalytics("nonexistent", "http://localhost:8080"))
                 .isInstanceOf(ShortCodeNotFoundException.class)
                 .hasMessageContaining("nonexistent");
     }

@@ -7,6 +7,7 @@ type DailyAccess = {
 
 type AnalyticsData = {
   shortCode: string
+  shortUrl: string
   originalUrl: string
   totalAccessCount: number
   createdAt: string

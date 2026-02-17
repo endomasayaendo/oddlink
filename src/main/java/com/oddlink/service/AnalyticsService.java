@@ -33,7 +33,7 @@ public class AnalyticsService {
      * @throws ShortCodeNotFoundException ショートコードが存在しない場合
      */
     @Transactional(readOnly = true)
-    public AnalyticsResponse getAnalytics(String shortCode) {
+    public AnalyticsResponse getAnalytics(String shortCode, String baseUrl) {
         UrlMapping urlMapping = urlMappingRepository.findByShortCode(shortCode)
                 .orElseThrow(() -> new ShortCodeNotFoundException(shortCode));
 
@@ -41,6 +41,7 @@ public class AnalyticsService {
 
         return new AnalyticsResponse(
                 urlMapping.getShortCode(),
+                baseUrl + "/" + urlMapping.getShortCode(),
                 urlMapping.getOriginalUrl(),
                 urlMapping.getAccessCount(),
                 urlMapping.getCreatedAt(),

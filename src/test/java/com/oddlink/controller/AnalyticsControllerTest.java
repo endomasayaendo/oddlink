@@ -15,6 +15,8 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -34,6 +36,7 @@ class AnalyticsControllerTest {
         String shortCode = "melting-clock-whispers-to-purple-elephant";
         AnalyticsResponse response = new AnalyticsResponse(
                 shortCode,
+                "http://localhost:8080/" + shortCode,
                 "https://example.com",
                 10L,
                 LocalDateTime.of(2025, 1, 1, 0, 0),
@@ -44,12 +47,13 @@ class AnalyticsControllerTest {
                 )
         );
 
-        when(analyticsService.getAnalytics(shortCode)).thenReturn(response);
+        when(analyticsService.getAnalytics(eq(shortCode), anyString())).thenReturn(response);
 
         mockMvc.perform(get("/api/analytics/" + shortCode))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType("application/json"))
                 .andExpect(jsonPath("$.shortCode").value(shortCode))
+                .andExpect(jsonPath("$.shortUrl").value("http://localhost:8080/" + shortCode))
                 .andExpect(jsonPath("$.originalUrl").value("https://example.com"))
                 .andExpect(jsonPath("$.totalAccessCount").value(10))
                 .andExpect(jsonPath("$.dailyAccess").isArray())
@@ -61,7 +65,7 @@ class AnalyticsControllerTest {
     @Test
     @DisplayName("存在しないshortCodeで404が返される")
     void getAnalytics_returns404WhenNotFound() throws Exception {
-        when(analyticsService.getAnalytics("nonexistent"))
+        when(analyticsService.getAnalytics(eq("nonexistent"), anyString()))
                 .thenThrow(new ShortCodeNotFoundException("nonexistent"));
 
         mockMvc.perform(get("/api/analytics/nonexistent"))
