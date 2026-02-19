@@ -126,7 +126,7 @@ graph TD
 ### 1. リポジトリをクローン
 
 ```bash
-git clone https://github.com/your-name/oddlink.git
+git clone https://github.com/endomasayaendo/oddlink.git
 cd oddlink
 ```
 
