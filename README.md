@@ -77,19 +77,19 @@ graph LR
 
 ```mermaid
 graph TD
-    subgraph Controller
-        IC["UrlIssueController<br/>POST /api/issue"]
-        RC["RedirectController<br/>GET /{shortCode}"]
-        AC["AnalyticsController<br/>GET /api/analytics/{shortCode}"]
+    subgraph Issue["URL発行"]
+        IC["UrlIssueController<br/>POST /api/issue"] --> IS[UrlIssueService]
+        IS --> SPG[SurrealPhraseGenerator]
+        SPG --> WC[WordCache]
+        IS --> MSS[UrlMappingSaveService]
     end
 
-    subgraph Service
-        IS[UrlIssueService]
-        SPG[SurrealPhraseGenerator]
-        WC[WordCache]
-        MSS[UrlMappingSaveService]
-        RS[UrlRedirectService]
-        AS[AnalyticsService]
+    subgraph Redirect["リダイレクト"]
+        RC["RedirectController<br/>GET /{shortCode}"] --> RS[UrlRedirectService]
+    end
+
+    subgraph Analytics["アナリティクス"]
+        AC["AnalyticsController<br/>GET /api/analytics/{shortCode}"] --> AS[AnalyticsService]
     end
 
     subgraph Repository
@@ -98,18 +98,10 @@ graph TD
         WR["Word Repositories<br/>(adj / noun / verb / adv)"]
     end
 
-    IC --> IS
-    IS --> SPG
-    SPG --> WC
-    WC -.->|"起動時ロード"| WR
-    IS --> MSS
     MSS --> UMR
-
-    RC --> RS
+    WC -.->|"起動時ロード"| WR
     RS --> UMR
     RS --> ALR
-
-    AC --> AS
     AS --> UMR
     AS --> ALR
 ```
