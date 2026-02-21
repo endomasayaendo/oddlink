@@ -1,5 +1,5 @@
 .container {
-  max-width: 720px;
+  max-width: 860px;
   margin: 0 auto;
   padding: 2rem;
   text-align: center;
@@ -17,6 +17,11 @@
 .subtitle {
   color: #666;
   margin-bottom: 2rem;
+}
+
+.result-wrapper {
+  display: flex;
+  justify-content: center;
 }
 
 @media (max-width: 480px) {

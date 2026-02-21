@@ -9,6 +9,7 @@ type Props = {
 
 export function ResultCard({ shortUrl, onError }: Props) {
   const [copied, setCopied] = useState(false)
+  const shortCode = shortUrl.split('/').pop()!
 
   const handleCopy = async () => {
     try {
@@ -23,15 +24,24 @@ export function ResultCard({ shortUrl, onError }: Props) {
   return (
     <div className="result-card">
       <p className="result-card__label">Your link just got odd:</p>
-      <a href={shortUrl} target="_blank" rel="noopener noreferrer" className="result-card__url">
-        {shortUrl}
-      </a>
-      <button onClick={handleCopy} className="result-card__copy-button">
-        {copied ? 'Copied!' : 'Copy'}
-      </button>
-      <Link to={`/analytics/${shortUrl.split('/').pop()}`} className="result-card__analytics-link">
-        View Analytics
-      </Link>
+      <div className="result-card__row">
+        <a
+          href={shortUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="result-card__url"
+        >
+          {shortUrl}
+        </a>
+        <div className="result-card__actions">
+          <Link to={`/analytics/${shortCode}`} className="result-card__analytics-button">
+            Analytics
+          </Link>
+          <button onClick={handleCopy} className="result-card__copy-button">
+            {copied ? 'Copied!' : 'Copy'}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

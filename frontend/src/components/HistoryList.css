@@ -1,0 +1,139 @@
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.history-list {
+  margin-top: 2rem;
+  text-align: left;
+  animation: fade-in 0.3s ease-out;
+}
+
+.history-list__title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #bbb;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.5rem;
+}
+
+.history-list__items {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.history-list__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid #ebebeb;
+}
+
+.history-list__item:first-child {
+  border-top: 1px solid #ebebeb;
+}
+
+.history-list__urls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  overflow: hidden;
+  flex: 1;
+}
+
+.history-list__short-url {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #555;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.history-list__short-url:hover {
+  color: #667eea;
+}
+
+.history-list__original-url {
+  font-size: 0.7rem;
+  color: #bbb;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.history-list__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-shrink: 0;
+}
+
+.history-list__analytics-button {
+  font-size: 0.75rem;
+  color: #aaa;
+  background: none;
+  border: none;
+  padding: 0;
+  white-space: nowrap;
+  transition: color 0.2s;
+}
+
+.history-list__analytics-button:hover {
+  color: #667eea;
+  text-decoration: none;
+}
+
+.history-list__copy-button {
+  font-size: 0.75rem;
+  color: #aaa;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  white-space: nowrap;
+  transition: color 0.2s;
+}
+
+.history-list__copy-button:hover {
+  color: #667eea;
+}
+
+.history-list__remove-button {
+  background: none;
+  border: none;
+  color: #ddd;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  margin-left: 1rem;
+  transition: color 0.2s;
+}
+
+.history-list__remove-button:hover {
+  color: #aaa;
+}
+
+@media (max-width: 480px) {
+  .history-list__item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.4rem;
+    padding: 0.75rem 0;
+  }
+
+  .history-list__actions {
+    width: 100%;
+  }
+}

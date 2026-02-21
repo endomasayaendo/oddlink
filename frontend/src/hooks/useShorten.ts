@@ -1,14 +1,18 @@
 import { useState } from 'react'
 
+type ShortenResult = {
+  shortUrl: string
+  originalUrl: string
+}
+
 export function useShorten() {
-  const [shortUrl, setShortUrl] = useState(() => sessionStorage.getItem('shortUrl') || '')
+  const [result, setResult] = useState<ShortenResult | null>(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
-  const shorten = async (originalUrl: string) => {
+  const shorten = async (originalUrl: string): Promise<ShortenResult | null> => {
     setError('')
-    setShortUrl('')
-    sessionStorage.removeItem('shortUrl')
+    setResult(null)
     setLoading(true)
 
     try {
@@ -30,14 +34,16 @@ export function useShorten() {
       }
 
       const data = await response.json()
-      setShortUrl(data.shortUrl)
-      sessionStorage.setItem('shortUrl', data.shortUrl)
+      const shortenResult = { shortUrl: data.shortUrl, originalUrl }
+      setResult(shortenResult)
+      return shortenResult
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong')
+      return null
     } finally {
       setLoading(false)
     }
   }
 
-  return { shortUrl, error, loading, shorten, setError }
+  return { result, error, loading, shorten, setError }
 }

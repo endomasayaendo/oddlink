@@ -10,59 +10,97 @@
 }
 
 .result-card {
-  background: #f7f7f7;
-  padding: 1.5rem;
+  background: white;
+  padding: 1.75rem 2rem;
   border-radius: 12px;
-  text-align: center;
+  border: 2px solid #667eea;
+  box-shadow: 0 4px 20px rgba(102, 126, 234, 0.15);
   animation: fade-in-up 0.4s ease-out;
+  width: fit-content;
 }
 
 .result-card__label {
-  color: #666;
-  margin-bottom: 0.75rem;
+  color: #667eea;
+  font-family: 'Special Elite', cursive;
+  font-size: 0.9rem;
+  font-weight: 400;
+  margin-bottom: 1rem;
+  text-align: left;
+}
+
+.result-card__row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1rem;
 }
 
 .result-card__url {
-  display: block;
-  color: #667eea;
-  font-size: 1rem;
-  font-weight: 600;
-  margin-bottom: 0.75rem;
+  color: #213547;
+  font-family: 'Special Elite', cursive;
+  font-size: 1.4rem;
+  font-weight: 400;
+  white-space: nowrap;
 }
 
-.result-card__copy-button {
-  padding: 0.5rem 1rem;
-  font-size: 0.875rem;
+.result-card__url:hover {
+  color: #667eea;
+}
+
+.result-card__actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.result-card__analytics-button {
+  padding: 0.4rem 0.875rem;
+  font-size: 0.8rem;
+  font-weight: 600;
   color: #667eea;
   background: white;
   border: 2px solid #667eea;
   border-radius: 6px;
-  cursor: pointer;
   transition: all 0.2s;
 }
 
-.result-card__copy-button:hover {
+.result-card__analytics-button:hover {
   background: #667eea;
   color: white;
+  text-decoration: none;
 }
 
-.result-card__analytics-link {
-  display: block;
-  margin-top: 0.75rem;
-  font-size: 0.875rem;
-  color: #667eea;
+.result-card__copy-button {
+  padding: 0.4rem 0.875rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: white;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.result-card__copy-button:hover {
+  opacity: 0.85;
 }
 
 @media (max-width: 480px) {
   .result-card {
-    padding: 1rem;
+    padding: 1.25rem 1rem;
   }
 
   .result-card__url {
-    font-size: 0.7rem;
+    font-size: 0.85rem;
   }
 
-  .result-card__copy-button {
+  .result-card__actions {
     width: 100%;
+  }
+
+  .result-card__analytics-button,
+  .result-card__copy-button {
+    flex: 1;
+    text-align: center;
   }
 }
