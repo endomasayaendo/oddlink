@@ -33,7 +33,8 @@ class UrlIssueControllerTest {
                         .content("{\"originalUrl\": \"https://example.com\"}"))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
-                .andExpect(jsonPath("$.shortUrl").value("http://localhost:8080/melting-clock-whispers-to-purple-elephant"));
+                .andExpect(jsonPath("$.shortUrl").value("http://localhost:8080/melting-clock-whispers-to-purple-elephant"))
+                .andExpect(jsonPath("$.originalUrl").value("https://example.com"));
     }
 
     @Test
@@ -75,6 +76,6 @@ class UrlIssueControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"originalUrl\": \"https://example.com\"}"))
                 .andExpect(status().isServiceUnavailable())
-                .andExpect(jsonPath("$.message").value("サービスが一時的に利用できません"));
+                .andExpect(jsonPath("$.message").value("Service temporarily unavailable"));
     }
 }

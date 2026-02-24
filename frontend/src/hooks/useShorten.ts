@@ -34,7 +34,7 @@ export function useShorten() {
       }
 
       const data = await response.json()
-      const shortenResult = { shortUrl: data.shortUrl, originalUrl }
+      const shortenResult = { shortUrl: data.shortUrl, originalUrl: data.originalUrl }
       setResult(shortenResult)
       return shortenResult
     } catch (err) {

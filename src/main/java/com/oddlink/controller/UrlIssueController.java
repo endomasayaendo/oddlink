@@ -31,6 +31,6 @@ public class UrlIssueController {
     @PostMapping("/issue")
     public IssueResponse issueUrl(@Valid @RequestBody IssueRequest request) {
         String shortCode = urlIssueService.issue(request.originalUrl());
-        return new IssueResponse(baseUrl + "/" + shortCode);
+        return new IssueResponse(baseUrl + "/" + shortCode, request.originalUrl());
     }
 }
