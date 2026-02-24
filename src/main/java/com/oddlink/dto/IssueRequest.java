@@ -8,8 +8,8 @@ import org.hibernate.validator.constraints.URL;
  * @param originalUrl 変換前のURL
  */
 public record IssueRequest(
-        @NotBlank(message = "URLは必須です")
-        @URL(message = "有効なURL形式で入力してください")
+        @NotBlank(message = "URL is required")
+        @URL(message = "Must be a valid URL")
         String originalUrl
 ) {
 }

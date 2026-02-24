@@ -45,7 +45,7 @@ public class GlobalExceptionHandler {
 
         return ResponseEntity
                 .status(HttpStatus.SERVICE_UNAVAILABLE)
-                .body(new ErrorResponse("サービスが一時的に利用できません"));
+                .body(new ErrorResponse("Service temporarily unavailable"));
     }
 
     /**
@@ -59,7 +59,7 @@ public class GlobalExceptionHandler {
 
         return ResponseEntity
                 .status(HttpStatus.SERVICE_UNAVAILABLE)
-                .body(new ErrorResponse("データベースエラーが発生しました"));
+                .body(new ErrorResponse("A database error occurred"));
     }
 
     /**
@@ -85,7 +85,7 @@ public class GlobalExceptionHandler {
 
         return ResponseEntity
                 .badRequest()
-                .body(new ErrorResponse("不正なリクエストです"));
+                .body(new ErrorResponse("Invalid request"));
     }
 
     /**
@@ -111,6 +111,6 @@ public class GlobalExceptionHandler {
 
         return ResponseEntity
                 .status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(new ErrorResponse("予期せぬエラーが発生しました"));
+                .body(new ErrorResponse("An unexpected error occurred"));
     }
 }
