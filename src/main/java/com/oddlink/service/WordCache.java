@@ -54,7 +54,7 @@ public class WordCache {
      * 単語追加時に呼び出す
      * @throws IllegalStateException いずれかの単語リストが空の場合
      */
-    public void refresh() {
+    private void refresh() {
         this.adjectives = adjectiveRepository.findByIsActiveTrueOrderById()
                 .stream()
                 .map(Adjective::getWord)
