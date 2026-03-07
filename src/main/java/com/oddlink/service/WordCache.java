@@ -25,10 +25,10 @@ public class WordCache {
     private final VerbRepository verbRepository;
     private final AdverbRepository adverbRepository;
 
-    private List<String> adjectives;
-    private List<String> nouns;
-    private List<String> verbs;
-    private List<String> adverbs;
+    private volatile List<String> adjectives;
+    private volatile List<String> nouns;
+    private volatile List<String> verbs;
+    private volatile List<String> adverbs;
 
     public WordCache(
             AdjectiveRepository adjectiveRepository,
