@@ -6,7 +6,7 @@ if (existsSync(".env")) process.loadEnvFile(".env");
 
 export default defineConfig({
   resolve: {
-    alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
+    alias: [{ find: /^@\//, replacement: fileURLToPath(new URL("./", import.meta.url)) }],
   },
   test: {
     environment: "node",
