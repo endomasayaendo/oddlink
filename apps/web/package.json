@@ -17,16 +17,17 @@
     "typecheck": "next typegen && tsc --noEmit"
   },
   "dependencies": {
+    "@oddlink/ui": "workspace:*",
     "@oddlink/utils": "workspace:*",
     "drizzle-orm": "^0.45.4",
     "next": "16.4.3",
     "pg": "^8.23.1",
     "react": "19.3.0",
     "react-dom": "19.3.0",
-    "recharts": "^3.10.1",
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@oddlink/tailwind-config": "workspace:*",
     "@oddlink/tsconfig": "workspace:*",
     "@tailwindcss/turbopack": "^4",
     "@types/node": "^24.19.2",

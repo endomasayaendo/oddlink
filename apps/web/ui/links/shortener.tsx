@@ -3,7 +3,7 @@
 import { useActionState, useState } from "react";
 import { issueAction, type IssueState } from "@/lib/actions/issue-link";
 import { useHistory } from "@/ui/links/use-history";
-import { ErrorMessage } from "@/ui/shared/error-message";
+import { ErrorMessage } from "@oddlink/ui";
 import { HistoryList } from "./history-list";
 import { ResultCard } from "./result-card";
 import { UrlForm } from "./url-form";

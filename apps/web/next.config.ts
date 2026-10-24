@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   // Workspace packages ship TypeScript source, so Next compiles them.
-  transpilePackages: ["@oddlink/utils"],
+  transpilePackages: ["@oddlink/ui", "@oddlink/utils"],
   cacheComponents: true,
   partialPrefetching: true,
   turbopack: {

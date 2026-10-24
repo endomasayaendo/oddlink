@@ -1,10 +1,10 @@
+import { LineChart } from "@oddlink/ui/charts";
 import Link from "next/link";
-import { Suspense } from "react";
 import { notFound } from "next/navigation";
-import { DailyChart } from "@/ui/analytics/daily-chart";
-import { StatCard } from "@/ui/analytics/stat-card";
+import { Suspense } from "react";
 import { getAnalytics } from "@/lib/analytics/get-analytics";
 import { APP_TIME_ZONE } from "@/lib/constants";
+import { StatCard } from "@/ui/analytics/stat-card";
 
 function formatDate(date: Date | null): string {
   if (!date) return "-";
@@ -69,7 +69,7 @@ async function AnalyticsContent({ params }: Pick<PageProps<"/analytics/[shortCod
       <div className="mb-8 rounded-xl bg-[#f7f7f7] p-4 sm:p-6">
         <p className="mb-4 font-semibold text-ink">Daily Clicks</p>
         {chartData.length > 0 ? (
-          <DailyChart data={chartData} />
+          <LineChart data={chartData} xKey="date" yKey="count" />
         ) : (
           <p className="py-8 text-center text-[#666]">No access data yet</p>
         )}

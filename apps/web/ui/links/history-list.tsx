@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { useCopy } from "@/ui/shared/use-copy";
+import { useCopy } from "@oddlink/ui";
 import type { HistoryEntry } from "@/ui/links/use-history";
 
 type Props = {

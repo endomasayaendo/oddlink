@@ -1,0 +1,4 @@
+{
+  "extends": "@oddlink/tsconfig/react-library.json",
+  "include": ["src"]
+}

@@ -1,0 +1,31 @@
+{
+  "name": "@oddlink/ui",
+  "description": "Shared UI components for OddLink",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts",
+    "./charts": "./src/charts/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "recharts": "^3.10.1"
+  },
+  "devDependencies": {
+    "@oddlink/tailwind-config": "workspace:*",
+    "@oddlink/tsconfig": "workspace:*",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "typescript": "^5.9.3"
+  },
+  "peerDependencies": {
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  }
+}

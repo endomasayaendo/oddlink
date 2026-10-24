@@ -1,0 +1,12 @@
+{
+  "name": "@oddlink/tailwind-config",
+  "description": "Shared Tailwind CSS v4 theme for OddLink",
+  "version": "0.0.0",
+  "private": true,
+  "exports": {
+    "./theme.css": {
+      "style": "./theme.css",
+      "default": "./theme.css"
+    }
+  }
+}
