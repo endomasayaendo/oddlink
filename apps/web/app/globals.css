@@ -1,0 +1,11 @@
+@import "tailwindcss";
+@import "@oddlink/tailwind-config/theme.css";
+
+/* Workspace UI components live outside this app, so scan them for classes too. */
+@source "../../../packages/ui/src";
+
+@layer base {
+  a:hover {
+    text-decoration: underline;
+  }
+}
