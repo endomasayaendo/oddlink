@@ -135,7 +135,7 @@ Run from the repository root; Turborepo runs each task in every package that def
 
 | Command | |
 |---|---|
-| `pnpm dev` / `build` | Next.js dev server / production build |
+| `pnpm dev` / `build` / `start` | Next.js dev server / production build / production server |
 | `pnpm lint` / `typecheck` | Lint / type check |
 | `pnpm test` | Run tests (needs `db:up`; creates `oddlink_test` automatically) |
 | `pnpm db:up` / `db:down` | Start / stop Postgres |
@@ -146,7 +146,7 @@ Run from the repository root; Turborepo runs each task in every package that def
 
 ## Environment Variables
 
-Set in `apps/web/.env`.
+Set in `apps/web/.env`, or in the shell (`turbo.json` passes these through to the tasks).
 
 | Variable | Default | Description |
 |----------|---------|-------------|

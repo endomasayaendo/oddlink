@@ -1,7 +1,8 @@
-// Top-level routes in app/. A short code can never be one of these.
-const RESERVED_KEYS = new Set(["analytics", "not-found", "api"]);
+// Single-segment routes that app/ serves itself. Every other single-segment path
+// is treated as a short code, like the old app/[shortCode] route did.
+// tests/redirects/reserved-keys.test.ts fails if a new top-level route is missing here.
+export const RESERVED_KEYS = new Set(["not-found", "favicon.ico"]);
 
-/** Paths the link middleware must leave to the app: its own routes and Next.js internals. */
 export function isReservedKey(key: string): boolean {
-  return RESERVED_KEYS.has(key) || key.startsWith("_");
+  return RESERVED_KEYS.has(key);
 }

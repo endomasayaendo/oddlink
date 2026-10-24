@@ -4,23 +4,24 @@ import { isReservedKey } from "@/lib/middleware/utils/is-reserved-key";
 import { parse } from "@/lib/middleware/utils/parse";
 
 export const config = {
-  matcher: [
-    /*
-     * Match all paths except for:
-     * 1. /api/ routes
-     * 2. /_next/ (Next.js internals)
-     * 3. files with an extension (favicon.ico, robots.txt, images, ...)
-     */
-    "/((?!api/|_next/|.*\\..*).*)",
-  ],
+  // Only single-segment paths can be short links; `/`, `/analytics/...`, `/api/...`
+  // and `/_next/...` never reach the proxy.
+  matcher: ["/([^/]+)"],
 };
 
 export async function proxy(req: NextRequest, ev: NextFetchEvent) {
   const { key } = parse(req);
 
-  // `/` (including Server Action posts to it) and app routes render as usual.
   if (!key || isReservedKey(key)) {
     return NextResponse.next();
+  }
+
+  // Mirror what a GET-only route handler answers, so other methods never count as clicks.
+  if (req.method === "OPTIONS") {
+    return new NextResponse(null, { status: 204, headers: { Allow: "GET, HEAD, OPTIONS" } });
+  }
+  if (req.method !== "GET" && req.method !== "HEAD") {
+    return new NextResponse(null, { status: 405 });
   }
 
   return LinkMiddleware(req, ev, key);

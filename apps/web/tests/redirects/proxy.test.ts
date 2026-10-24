@@ -14,12 +14,14 @@ const insertLink = (shortCode: string, originalUrl: string, expiresAt: Date | nu
 
 const future = () => new Date(Date.now() + 86_400_000);
 const past = () => new Date(Date.now() - 86_400_000);
+const countOf = async (shortCode: string) =>
+  (await db.query.urlMappings.findFirst({ where: eq(urlMappings.shortCode, shortCode) }))!.accessCount;
 
 // Collects waitUntil() work so tests can await it like the runtime would.
-function request(path: string) {
+function request(path: string, method = "GET") {
   const pending: Promise<unknown>[] = [];
   const ev = { waitUntil: (p: Promise<unknown>) => void pending.push(p) } as Parameters<typeof proxy>[1];
-  const res = proxy(new NextRequest(`http://localhost:3000${path}`), ev);
+  const res = proxy(new NextRequest(`http://localhost:3000${path}`, { method }), ev);
   return { res, settled: async () => Promise.all(pending) };
 }
 
@@ -53,13 +55,40 @@ describe("proxy redirects", () => {
     expect((await request("/bad-code").res).headers.get("location")).toBe("http://localhost:3000/not-found");
   });
 
-  it("treats any other single-segment path as a short code, like before", async () => {
-    expect((await request("/foo").res).headers.get("location")).toBe("http://localhost:3000/not-found");
+  it.each(["/foo", "/analytics", "/api", "/foo.bar", "/robots.txt", "/_x", "/_next"])(
+    "treats %s as a short code and sends it to the not-found page, like before",
+    async (path) => {
+      expect((await request(path).res).headers.get("location")).toBe("http://localhost:3000/not-found");
+    },
+  );
+
+  it("counts HEAD requests like GET", async () => {
+    await insertLink("head-code", "https://example.com", future());
+    const response = await request("/head-code", "HEAD").res;
+    expect(response.status).toBe(302);
+    expect(await countOf("head-code")).toBe(1);
+  });
+
+  it.each(["POST", "PUT", "DELETE", "PATCH"])("answers %s with 405 without counting a click", async (method) => {
+    const link = await insertLink("go-code", "https://example.com", future());
+    const { res, settled } = request("/go-code", method);
+    expect((await res).status).toBe(405);
+    await settled();
+    expect(await countOf("go-code")).toBe(0);
+    expect(await db.$count(accessLog, eq(accessLog.urlMappingId, link.id))).toBe(0);
+  });
+
+  it("answers OPTIONS with the allowed methods without counting a click", async () => {
+    await insertLink("go-code", "https://example.com", future());
+    const response = await request("/go-code", "OPTIONS").res;
+    expect(response.status).toBe(204);
+    expect(response.headers.get("allow")).toBe("GET, HEAD, OPTIONS");
+    expect(await countOf("go-code")).toBe(0);
   });
 });
 
 describe("proxy pass-through", () => {
-  it.each(["/", "/not-found", "/analytics", "/analytics/some-code", "/_next-internal", "/a/b"])(
+  it.each(["/", "/not-found", "/favicon.ico", "/analytics/some-code", "/a/b"])(
     "lets %s reach the app",
     async (path) => {
       expect(passesThrough(await request(path).res)).toBe(true);
@@ -68,11 +97,11 @@ describe("proxy pass-through", () => {
 });
 
 describe("proxy matcher", () => {
-  it.each(["/", "/some-code", "/not-found", "/analytics/some-code"])("runs on %s", (url) => {
+  it.each(["/some-code", "/not-found", "/favicon.ico", "/robots.txt", "/_next"])("runs on %s", (url) => {
     expect(unstable_doesMiddlewareMatch({ config, url })).toBe(true);
   });
 
-  it.each(["/api/issue", "/_next/static/chunk.js", "/favicon.ico", "/robots.txt"])("skips %s", (url) => {
+  it.each(["/", "/analytics/some-code", "/api/issue", "/_next/static/chunk.js", "/a/b"])("skips %s", (url) => {
     expect(unstable_doesMiddlewareMatch({ config, url })).toBe(false);
   });
 });
