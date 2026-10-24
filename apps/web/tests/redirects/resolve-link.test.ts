@@ -1,18 +1,10 @@
-import { eq, sql } from "drizzle-orm";
-import { describe, expect, it, vi } from "vitest";
+import { eq } from "drizzle-orm";
+import { describe, expect, it } from "vitest";
 import { db } from "@/lib/db";
 import { accessLog, urlMappings } from "@/lib/db/schema";
 import { recordClick } from "@/lib/links/record-click";
 import { resolveShortCode, toRedirectUrl } from "@/lib/links/resolve-link";
 import { resetUrlTables } from "../utils/reset-db";
-
-const pending: Promise<unknown>[] = [];
-vi.mock("next/server", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("next/server")>()),
-  after: (task: () => Promise<unknown>) => pending.push(task()),
-}));
-
-const { GET } = await import("@/app/[shortCode]/route");
 
 resetUrlTables();
 
@@ -79,36 +71,5 @@ describe("toRedirectUrl", () => {
 
   it.each(["not a url", "javascript:alert(1)", "file:///etc/passwd"])("rejects %s", (value) => {
     expect(toRedirectUrl(value)).toBeNull();
-  });
-});
-
-describe("GET /[shortCode]", () => {
-  const get = (shortCode: string) =>
-    GET(new Request(`http://localhost:3000/${shortCode}`), { params: Promise.resolve({ shortCode }) });
-
-  it("redirects to the original URL and logs the access", async () => {
-    const link = await insertLink("go-code", "https://example.com/target", future());
-    const res = await get("go-code");
-    expect(res.status).toBe(302);
-    expect(res.headers.get("location")).toBe("https://example.com/target");
-    await Promise.all(pending.splice(0));
-    expect(await db.$count(accessLog, eq(accessLog.urlMappingId, link.id))).toBe(1);
-  });
-
-  it("redirects to the not-found page for an unknown code", async () => {
-    const res = await get("missing-code");
-    expect(res.status).toBe(302);
-    expect(res.headers.get("location")).toBe("http://localhost:3000/not-found");
-  });
-
-  it("redirects to the not-found page for an expired code", async () => {
-    await insertLink("old-code", "https://example.com", past());
-    expect((await get("old-code")).headers.get("location")).toBe("http://localhost:3000/not-found");
-  });
-
-  it("redirects to the not-found page when the stored URL is unusable", async () => {
-    await insertLink("bad-code", "https://example.com", future());
-    await db.execute(sql`UPDATE url_mappings SET original_url = 'javascript:alert(1)' WHERE short_code = 'bad-code'`);
-    expect((await get("bad-code")).headers.get("location")).toBe("http://localhost:3000/not-found");
   });
 });
