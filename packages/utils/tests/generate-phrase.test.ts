@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { generatePhrase, PATTERN_COUNT, type WordLists } from "@/lib/links/generate-phrase";
+import { generatePhrase, PATTERN_COUNT, type WordLists } from "../src";
 
 const words: WordLists = {
   adjectives: ["golden", "silent", "broken"],

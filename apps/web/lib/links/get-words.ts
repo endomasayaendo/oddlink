@@ -1,7 +1,7 @@
 import { asc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { adjectives, adverbs, nouns, verbs } from "@/lib/db/schema";
-import type { WordLists } from "./generate-phrase";
+import type { WordLists } from "@oddlink/utils";
 
 // Loaded once per server process; serverless cold starts simply reload it.
 let cache: Promise<WordLists> | undefined;

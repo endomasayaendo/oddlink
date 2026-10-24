@@ -1,0 +1,4 @@
+{
+  "extends": "@oddlink/tsconfig/base.json",
+  "include": ["src", "tests"]
+}

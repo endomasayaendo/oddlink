@@ -1,0 +1,20 @@
+{
+  "name": "@oddlink/utils",
+  "description": "Framework-free utilities for OddLink",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@oddlink/tsconfig": "workspace:*",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.5"
+  }
+}

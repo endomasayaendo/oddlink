@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { urlMappings } from "@/lib/db/schema";
 import { shortUrlFor } from "@/lib/constants";
-import { generatePhrase } from "./generate-phrase";
+import { generatePhrase } from "@oddlink/utils";
 import { originalUrlSchema } from "@/lib/zod/schemas/links";
 import { getWords } from "./get-words";
 
