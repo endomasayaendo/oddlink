@@ -4,16 +4,23 @@ import { db } from "@/lib/db";
 export type ResolvedLink = { id: number; originalUrl: string };
 
 /**
- * Finds an unexpired link and counts the access in one atomic statement,
- * so concurrent hits never lose increments.
+ * Finds an unexpired http(s) link, counts the access and writes its access log row
+ * in one statement, so the count and the log can never diverge and concurrent hits
+ * never lose increments.
  */
 export async function resolveShortCode(shortCode: string): Promise<ResolvedLink | null> {
   const { rows } = await db.execute<{ id: string; original_url: string }>(sql`
-    UPDATE url_mappings
-    SET access_count = access_count + 1
-    WHERE short_code = ${shortCode}
-      AND (expires_at IS NULL OR expires_at > now())
-    RETURNING id, original_url
+    WITH hit AS (
+      UPDATE url_mappings
+      SET access_count = access_count + 1
+      WHERE short_code = ${shortCode}
+        AND (expires_at IS NULL OR expires_at > now())
+        AND original_url ~* '^https?://'
+      RETURNING id, original_url
+    )
+    INSERT INTO access_log (url_mapping_id)
+    SELECT id FROM hit
+    RETURNING url_mapping_id AS id, (SELECT original_url FROM hit) AS original_url
   `);
   const row = rows[0];
   return row ? { id: Number(row.id), originalUrl: row.original_url } : null;

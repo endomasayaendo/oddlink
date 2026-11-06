@@ -17,25 +17,22 @@ const past = () => new Date(Date.now() - 86_400_000);
 const countOf = async (shortCode: string) =>
   (await db.query.urlMappings.findFirst({ where: eq(urlMappings.shortCode, shortCode) }))!.accessCount;
 
-// Collects waitUntil() work so tests can await it like the runtime would.
+const logsOf = (urlMappingId: number) => db.$count(accessLog, eq(accessLog.urlMappingId, urlMappingId));
+
 function request(path: string, method = "GET") {
-  const pending: Promise<unknown>[] = [];
-  const ev = { waitUntil: (p: Promise<unknown>) => void pending.push(p) } as Parameters<typeof proxy>[1];
-  const res = proxy(new NextRequest(`http://localhost:3000${path}`, { method }), ev);
-  return { res, settled: async () => Promise.all(pending) };
+  return { res: proxy(new NextRequest(`http://localhost:3000${path}`, { method })) };
 }
 
 const passesThrough = (res: Response) => res.headers.get("x-middleware-next") === "1";
 
 describe("proxy redirects", () => {
-  it("redirects to the original URL and logs the access", async () => {
+  it("redirects to the original URL and has counted and logged the access by then", async () => {
     const link = await insertLink("go-code", "https://example.com/target", future());
-    const { res, settled } = request("/go-code");
-    const response = await res;
+    const response = await request("/go-code").res;
     expect(response.status).toBe(302);
     expect(response.headers.get("location")).toBe("https://example.com/target");
-    await settled();
-    expect(await db.$count(accessLog, eq(accessLog.urlMappingId, link.id))).toBe(1);
+    expect(await countOf("go-code")).toBe(1);
+    expect(await logsOf(link.id)).toBe(1);
   });
 
   it("redirects to the not-found page for an unknown code", async () => {
@@ -44,15 +41,19 @@ describe("proxy redirects", () => {
     expect(response.headers.get("location")).toBe("http://localhost:3000/not-found");
   });
 
-  it("redirects to the not-found page for an expired code", async () => {
-    await insertLink("old-code", "https://example.com", past());
+  it("redirects to the not-found page for an expired code without counting it", async () => {
+    const link = await insertLink("old-code", "https://example.com", past());
     expect((await request("/old-code").res).headers.get("location")).toBe("http://localhost:3000/not-found");
+    expect(await countOf("old-code")).toBe(0);
+    expect(await logsOf(link.id)).toBe(0);
   });
 
-  it("redirects to the not-found page when the stored URL is unusable", async () => {
-    await insertLink("bad-code", "https://example.com", future());
+  it("redirects to the not-found page when the stored URL is unusable, without counting it", async () => {
+    const link = await insertLink("bad-code", "https://example.com", future());
     await db.execute(sql`UPDATE url_mappings SET original_url = 'javascript:alert(1)' WHERE short_code = 'bad-code'`);
     expect((await request("/bad-code").res).headers.get("location")).toBe("http://localhost:3000/not-found");
+    expect(await countOf("bad-code")).toBe(0);
+    expect(await logsOf(link.id)).toBe(0);
   });
 
   it.each(["/foo", "/analytics", "/api", "/foo.bar", "/robots.txt", "/_x", "/_next"])(
@@ -71,11 +72,9 @@ describe("proxy redirects", () => {
 
   it.each(["POST", "PUT", "DELETE", "PATCH"])("answers %s with 405 without counting a click", async (method) => {
     const link = await insertLink("go-code", "https://example.com", future());
-    const { res, settled } = request("/go-code", method);
-    expect((await res).status).toBe(405);
-    await settled();
+    expect((await request("/go-code", method).res).status).toBe(405);
     expect(await countOf("go-code")).toBe(0);
-    expect(await db.$count(accessLog, eq(accessLog.urlMappingId, link.id))).toBe(0);
+    expect(await logsOf(link.id)).toBe(0);
   });
 
   it("answers OPTIONS with the allowed methods without counting a click", async () => {
