@@ -1,5 +1,7 @@
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
+import { generatePhrase, type WordLists } from "@oddlink/utils";
+import { SHORT_CODE_MAX_LENGTH } from "@/lib/constants";
 import { db } from "@/lib/db";
 import { urlMappings } from "@/lib/db/schema";
 import { issueShortUrl } from "@/lib/links/issue-link";
@@ -59,6 +61,54 @@ describe("issueShortUrl", () => {
     });
     expect(result).toEqual({ ok: false, status: 503, message: "Service temporarily unavailable" });
     expect(calls).toBe(5);
+  });
+
+  it("regenerates when the phrase is too long for the column", async () => {
+    const tooLong = "a".repeat(SHORT_CODE_MAX_LENGTH + 1);
+    let calls = 0;
+    const next = sequence(tooLong, "fits-code");
+    const result = await issueShortUrl("https://example.com", {
+      generate: () => {
+        calls++;
+        return next();
+      },
+    });
+    expect(result).toMatchObject({ ok: true, shortCode: "fits-code" });
+    expect(calls).toBe(2);
+  });
+
+  it("accepts a phrase exactly at the column length", async () => {
+    const maxLength = "a".repeat(SHORT_CODE_MAX_LENGTH);
+    const result = await issueShortUrl("https://example.com", { generate: sequence(maxLength) });
+    expect(result).toMatchObject({ ok: true, shortCode: maxLength });
+    expect(await findByCode(maxLength)).toBeDefined();
+  });
+
+  it("regenerates over-long phrases built from 50-character words", async () => {
+    // Words at the varchar(50) limit: pattern A renders to 305 characters, pattern E to 203.
+    const long = (prefix: string) => [prefix.padEnd(50, "x")];
+    const words: WordLists = { adjectives: long("adj"), nouns: long("noun"), verbs: long("verb"), adverbs: long("adv") };
+    const patternA = () => 0; // random() == 0 picks the first pattern and the first word
+    const patternE = () => 4.5 / 6;
+    const phrases = [generatePhrase(words, patternA), generatePhrase(words, patternE)];
+    expect(phrases[0].length).toBeGreaterThan(SHORT_CODE_MAX_LENGTH);
+    expect(phrases[1].length).toBeLessThanOrEqual(SHORT_CODE_MAX_LENGTH);
+
+    const result = await issueShortUrl("https://example.com", { generate: sequence(...phrases) });
+    expect(result).toMatchObject({ ok: true, shortCode: phrases[1] });
+  });
+
+  it("gives up with 503 when every phrase is too long", async () => {
+    let calls = 0;
+    const result = await issueShortUrl("https://example.com", {
+      generate: async () => {
+        calls++;
+        return "a".repeat(SHORT_CODE_MAX_LENGTH + 1);
+      },
+    });
+    expect(result).toEqual({ ok: false, status: 503, message: "Service temporarily unavailable" });
+    expect(calls).toBe(5);
+    expect(await db.$count(urlMappings)).toBe(0);
   });
 
   it("rejects invalid URLs without touching the database", async () => {
