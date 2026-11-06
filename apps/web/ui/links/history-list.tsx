@@ -1,5 +1,6 @@
+import { useState } from "react";
 import Link from "next/link";
-import { useCopy } from "@oddlink/ui";
+import { ErrorMessage, useCopy } from "@oddlink/ui";
 import type { HistoryEntry } from "@/ui/links/use-history";
 
 type Props = {
@@ -14,37 +15,53 @@ function truncate(url: string, max: number): string {
 const actionClass = "cursor-pointer text-xs whitespace-nowrap text-[#aaa] transition-colors hover:text-brand hover:no-underline";
 
 function HistoryItem({ entry, onRemove }: { entry: HistoryEntry; onRemove: (shortCode: string) => void }) {
-  const { copied, copy } = useCopy();
+  const [copyError, setCopyError] = useState("");
+  const { copied, copy } = useCopy(setCopyError);
 
   return (
-    <li className="flex flex-col items-start gap-1.5 border-b border-[#ebebeb] py-3 first:border-t sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:py-2.5">
-      <div className="flex w-full flex-1 flex-col gap-0.5 overflow-hidden">
-        <a
-          href={entry.shortUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="truncate text-[0.8rem] font-medium text-[#555] hover:text-brand"
-        >
-          {entry.shortUrl}
-        </a>
-        <span className="truncate text-[0.7rem] text-[#bbb]">{truncate(entry.originalUrl, 50)}</span>
+    <li className="border-b border-[#ebebeb] py-3 first:border-t sm:py-2.5">
+      <div className="flex flex-col items-start gap-1.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+        <div className="flex w-full flex-1 flex-col gap-0.5 overflow-hidden">
+          <a
+            href={entry.shortUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="truncate text-[0.8rem] font-medium text-[#555] hover:text-brand"
+          >
+            {entry.shortUrl}
+          </a>
+          <span className="truncate text-[0.7rem] text-[#bbb]">{truncate(entry.originalUrl, 50)}</span>
+        </div>
+        <div className="flex w-full shrink-0 items-center gap-3 sm:w-auto">
+          <Link href={`/analytics/${entry.shortCode}`} className={actionClass}>
+            Analytics
+          </Link>
+          <button
+            type="button"
+            onClick={() => {
+              setCopyError("");
+              copy(entry.shortUrl);
+            }}
+            className={actionClass}
+          >
+            {copied ? "Copied!" : "Copy"}
+          </button>
+          <button
+            type="button"
+            onClick={() => onRemove(entry.shortCode)}
+            aria-label="Remove"
+            className="ml-4 cursor-pointer text-base leading-none text-[#ddd] transition-colors hover:text-[#aaa]"
+          >
+            ×
+          </button>
+        </div>
       </div>
-      <div className="flex w-full shrink-0 items-center gap-3 sm:w-auto">
-        <Link href={`/analytics/${entry.shortCode}`} className={actionClass}>
-          Analytics
-        </Link>
-        <button type="button" onClick={() => copy(entry.shortUrl)} className={actionClass}>
-          {copied ? "Copied!" : "Copy"}
-        </button>
-        <button
-          type="button"
-          onClick={() => onRemove(entry.shortCode)}
-          aria-label="Remove"
-          className="ml-4 cursor-pointer text-base leading-none text-[#ddd] transition-colors hover:text-[#aaa]"
-        >
-          ×
-        </button>
-      </div>
+      {copyError && (
+        // ErrorMessage carries a bottom margin meant for page-level use; drop it inside the row.
+        <div className="mt-2 [&>div]:mb-0">
+          <ErrorMessage message={copyError} onDismiss={() => setCopyError("")} />
+        </div>
+      )}
     </li>
   );
 }
