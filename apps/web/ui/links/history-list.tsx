@@ -56,12 +56,7 @@ function HistoryItem({ entry, onRemove }: { entry: HistoryEntry; onRemove: (shor
           </button>
         </div>
       </div>
-      {copyError && (
-        // ErrorMessage carries a bottom margin meant for page-level use; drop it inside the row.
-        <div className="mt-2 [&>div]:mb-0">
-          <ErrorMessage message={copyError} onDismiss={() => setCopyError("")} />
-        </div>
-      )}
+      {copyError && <ErrorMessage message={copyError} onDismiss={() => setCopyError("")} className="mt-2" />}
     </li>
   );
 }
