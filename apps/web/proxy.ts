@@ -1,4 +1,4 @@
-import { type NextFetchEvent, type NextRequest, NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 import { LinkMiddleware } from "@/lib/middleware/link";
 import { isReservedKey } from "@/lib/middleware/utils/is-reserved-key";
 import { parse } from "@/lib/middleware/utils/parse";
@@ -9,7 +9,7 @@ export const config = {
   matcher: ["/([^/]+)"],
 };
 
-export async function proxy(req: NextRequest, ev: NextFetchEvent) {
+export async function proxy(req: NextRequest) {
   const { key } = parse(req);
 
   if (!key || isReservedKey(key)) {
@@ -24,5 +24,5 @@ export async function proxy(req: NextRequest, ev: NextFetchEvent) {
     return new NextResponse(null, { status: 405 });
   }
 
-  return LinkMiddleware(req, ev, key);
+  return LinkMiddleware(req, key);
 }
