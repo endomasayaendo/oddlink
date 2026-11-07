@@ -13,6 +13,9 @@ export async function LinkMiddleware(req: NextRequest, key: string) {
   const target = link && toRedirectUrl(link.originalUrl);
 
   if (!link || !target) {
+    // Safe behind a proxy: Next's middleware adapter rewrites a same-host redirect into a
+    // relative `Location: /not-found`, so the internal host in req.url never reaches the browser.
+    // Don't return a literal relative Location instead; the adapter parses it without a base and throws.
     return NextResponse.redirect(new URL("/not-found", req.url), 302);
   }
 
