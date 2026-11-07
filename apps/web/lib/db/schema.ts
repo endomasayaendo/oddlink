@@ -1,5 +1,7 @@
 import { bigint, bigserial, boolean, index, pgTable, text, timestamp, varchar } from "drizzle-orm/pg-core";
-import { SHORT_CODE_MAX_LENGTH } from "../constants";
+
+/** Column length of url_mappings.short_code; issuing regenerates phrases longer than this. */
+export const SHORT_CODE_MAX_LENGTH = 255;
 
 export const urlMappings = pgTable("url_mappings", {
   id: bigserial({ mode: "number" }).primaryKey(),
