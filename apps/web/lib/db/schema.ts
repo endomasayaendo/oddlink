@@ -1,9 +1,12 @@
 import { bigint, bigserial, boolean, index, pgTable, text, timestamp, varchar } from "drizzle-orm/pg-core";
 
+/** Column length of url_mappings.short_code; issuing regenerates phrases longer than this. */
+export const SHORT_CODE_MAX_LENGTH = 255;
+
 export const urlMappings = pgTable("url_mappings", {
   id: bigserial({ mode: "number" }).primaryKey(),
   // UNIQUE already creates an index; no separate index on short_code.
-  shortCode: varchar("short_code", { length: 255 }).notNull().unique(),
+  shortCode: varchar("short_code", { length: SHORT_CODE_MAX_LENGTH }).notNull().unique(),
   originalUrl: text("original_url").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   expiresAt: timestamp("expires_at", { withTimezone: true }),

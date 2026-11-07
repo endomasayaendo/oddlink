@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { urlMappings } from "@/lib/db/schema";
+import { SHORT_CODE_MAX_LENGTH, urlMappings } from "@/lib/db/schema";
 import { shortUrlFor } from "@/lib/constants";
 import { generatePhrase } from "@oddlink/utils";
 import { originalUrlSchema } from "@/lib/zod/schemas/links";
@@ -16,7 +16,10 @@ type Options = { generate?: () => Promise<string> };
 
 const defaultGenerate = async () => generatePhrase(await getWords());
 
-/** Validates the URL and stores it under a fresh phrase, regenerating on collisions. */
+/**
+ * Validates the URL and stores it under a fresh phrase, regenerating on collisions
+ * and on phrases too long for the short_code column. Both share MAX_ATTEMPTS.
+ */
 export async function issueShortUrl(input: unknown, { generate = defaultGenerate }: Options = {}): Promise<IssueResult> {
   const parsed = originalUrlSchema.safeParse(input);
   if (!parsed.success) {
@@ -24,9 +27,17 @@ export async function issueShortUrl(input: unknown, { generate = defaultGenerate
   }
   const originalUrl = parsed.data;
 
+  let tooLong = 0;
   try {
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
       const shortCode = await generate();
+      // Would fail with 22001 (value too long). Count code points, as varchar(n) does.
+      const length = [...shortCode].length;
+      if (length > SHORT_CODE_MAX_LENGTH) {
+        tooLong++;
+        console.warn(`Generated phrase is ${length} characters (max ${SHORT_CODE_MAX_LENGTH}); check the word lists for long words`);
+        continue;
+      }
       try {
         await db.insert(urlMappings).values({
           shortCode,
@@ -38,7 +49,9 @@ export async function issueShortUrl(input: unknown, { generate = defaultGenerate
         if (!isUniqueViolation(error)) throw error;
       }
     }
-    console.warn(`Failed to generate a unique phrase after ${MAX_ATTEMPTS} attempts`);
+    console.warn(
+      `Failed to issue a short code after ${MAX_ATTEMPTS} attempts (${MAX_ATTEMPTS - tooLong} collisions, ${tooLong} too long)`,
+    );
   } catch (error) {
     console.error("Failed to issue short URL", error);
   }
