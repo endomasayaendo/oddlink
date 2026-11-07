@@ -112,8 +112,47 @@ describe("proxy redirects", () => {
   });
 });
 
+describe("proxy analytics check", () => {
+  const rewriteOf = (res: Response) => res.headers.get("x-middleware-rewrite");
+
+  it("lets an existing code reach the analytics page", async () => {
+    await insertLink("stats-code", "https://example.com", future());
+    expect(passesThrough(await request("/analytics/stats-code").res)).toBe(true);
+  });
+
+  it("lets an expired code reach the analytics page", async () => {
+    await insertLink("old-stats", "https://example.com", past());
+    expect(passesThrough(await request("/analytics/old-stats").res)).toBe(true);
+  });
+
+  it("rewrites an unknown code to the static 404 page", async () => {
+    const response = await request("/analytics/missing-code").res;
+    expect(rewriteOf(response)).toBe("http://localhost:3000/analytics/not-found");
+  });
+
+  it.each([
+    ["an undecodable code", "/analytics/%E0%A4%A"],
+    ["a reserved key", "/analytics/not-found"],
+    ["a code longer than the column", `/analytics/${"a".repeat(256)}`],
+  ])("rewrites %s to the static 404 page", async (_, path) => {
+    expect(rewriteOf(await request(path).res)).toBe("http://localhost:3000/analytics/not-found");
+  });
+
+  it("decodes the code like the page's params", async () => {
+    await insertLink("café-code", "https://example.com", future());
+    expect(passesThrough(await request(`/analytics/${encodeURIComponent("café-code")}`).res)).toBe(true);
+  });
+
+  it("does not count a click", async () => {
+    const link = await insertLink("stats-code", "https://example.com", future());
+    await request("/analytics/stats-code").res;
+    expect(await countOf("stats-code")).toBe(0);
+    expect(await logsOf(link.id)).toBe(0);
+  });
+});
+
 describe("proxy pass-through", () => {
-  it.each(["/", "/not-found", "/favicon.ico", "/analytics/some-code", "/a/b"])(
+  it.each(["/", "/not-found", "/favicon.ico", "/a/b"])(
     "lets %s reach the app",
     async (path) => {
       expect(passesThrough(await request(path).res)).toBe(true);
@@ -122,11 +161,16 @@ describe("proxy pass-through", () => {
 });
 
 describe("proxy matcher", () => {
-  it.each(["/some-code", "/not-found", "/favicon.ico", "/robots.txt", "/_next"])("runs on %s", (url) => {
+  it.each(["/some-code", "/not-found", "/favicon.ico", "/robots.txt", "/_next", "/analytics/some-code"])("runs on %s", (url) => {
     expect(unstable_doesMiddlewareMatch({ config, url })).toBe(true);
   });
 
-  it.each(["/", "/analytics/some-code", "/api/issue", "/_next/static/chunk.js", "/a/b"])("skips %s", (url) => {
+  it.each(["/", "/analytics/a/b", "/api/issue", "/_next/static/chunk.js", "/a/b"])("skips %s", (url) => {
     expect(unstable_doesMiddlewareMatch({ config, url })).toBe(false);
+  });
+
+  it("skips the analytics check for prefetches", () => {
+    const headers = { "next-router-prefetch": "1" };
+    expect(unstable_doesMiddlewareMatch({ config, url: "/analytics/some-code", headers })).toBe(false);
   });
 });
