@@ -3,15 +3,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useCopy } from "../src/hooks/use-copy";
 
 describe("useCopy", () => {
+  let writeText: ReturnType<typeof vi.fn<(text: string) => Promise<void>>>;
+  let originalClipboard: PropertyDescriptor | undefined;
+
   beforeEach(() => {
     vi.useFakeTimers();
-    Object.defineProperty(navigator, "clipboard", {
-      configurable: true,
-      value: { writeText: vi.fn().mockResolvedValue(undefined) },
-    });
+    writeText = vi.fn<(text: string) => Promise<void>>().mockResolvedValue(undefined);
+    originalClipboard = Object.getOwnPropertyDescriptor(navigator, "clipboard");
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
   });
 
   afterEach(() => {
+    if (originalClipboard) Object.defineProperty(navigator, "clipboard", originalClipboard);
+    else delete (navigator as { clipboard?: unknown }).clipboard;
     vi.useRealTimers();
   });
 
@@ -53,8 +57,24 @@ describe("useCopy", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
+  it("does not schedule a timer when the write resolves after unmount", async () => {
+    let resolveWrite!: () => void;
+    writeText.mockReturnValueOnce(new Promise<void>((resolve) => (resolveWrite = resolve)));
+    const { result, unmount } = renderHook(() => useCopy());
+
+    let pending!: Promise<void>;
+    act(() => {
+      pending = result.current.copy("a");
+    });
+    unmount();
+    resolveWrite();
+    await pending;
+
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it("reports an error when the clipboard write fails", async () => {
-    vi.mocked(navigator.clipboard.writeText).mockRejectedValueOnce(new Error("denied"));
+    writeText.mockRejectedValueOnce(new Error("denied"));
     const onError = vi.fn();
     const { result } = renderHook(() => useCopy(onError));
 
@@ -62,5 +82,19 @@ describe("useCopy", () => {
 
     expect(result.current.copied).toBe(false);
     expect(onError).toHaveBeenCalledWith("Failed to copy to clipboard");
+  });
+
+  it("clears copied when a copy fails within two seconds of a successful one", async () => {
+    const onError = vi.fn();
+    const { result } = renderHook(() => useCopy(onError));
+
+    await act(() => result.current.copy("a"));
+    act(() => vi.advanceTimersByTime(1000));
+    writeText.mockRejectedValueOnce(new Error("denied"));
+    await act(() => result.current.copy("a"));
+
+    expect(result.current.copied).toBe(false);
+    expect(onError).toHaveBeenCalledWith("Failed to copy to clipboard");
+    expect(vi.getTimerCount()).toBe(0);
   });
 });
