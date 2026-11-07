@@ -1,13 +1,14 @@
 import { eq, sql } from "drizzle-orm";
 import { unstable_doesMiddlewareMatch } from "next/experimental/testing/server";
 import { NextRequest } from "next/server";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { db } from "@/lib/db";
 import { accessLog, urlMappings } from "@/lib/db/schema";
 import { config, proxy } from "@/proxy";
 import { resetUrlTables } from "../utils/reset-db";
 
 resetUrlTables();
+afterEach(() => vi.restoreAllMocks());
 
 const insertLink = (shortCode: string, originalUrl: string, expiresAt: Date | null) =>
   db.insert(urlMappings).values({ shortCode, originalUrl, expiresAt }).returning().then((rows) => rows[0]);
@@ -54,6 +55,21 @@ describe("proxy redirects", () => {
     expect((await request("/bad-code").res).headers.get("location")).toBe("http://localhost:3000/not-found");
     expect(await countOf("bad-code")).toBe(0);
     expect(await logsOf(link.id)).toBe(0);
+  });
+
+  it("redirects a stored URL without // the way URL parsing reads it, and counts it", async () => {
+    const link = await insertLink("odd-code", "https://example.com", future());
+    await db.execute(sql`UPDATE url_mappings SET original_url = 'https:example.com/x' WHERE short_code = 'odd-code'`);
+    expect((await request("/odd-code").res).headers.get("location")).toBe("https://example.com/x");
+    expect(await countOf("odd-code")).toBe(1);
+    expect(await logsOf(link.id)).toBe(1);
+  });
+
+  it("answers 503 instead of throwing when the database write fails", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(db, "execute").mockRejectedValueOnce(new Error("connection lost"));
+    expect((await request("/some-code").res).status).toBe(503);
+    expect(console.error).toHaveBeenCalled();
   });
 
   it.each(["/foo", "/analytics", "/api", "/foo.bar", "/robots.txt", "/_x", "/_next"])(

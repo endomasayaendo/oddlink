@@ -1,8 +1,15 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { resolveShortCode, toRedirectUrl } from "@/lib/links/resolve-link";
+import { type ResolvedLink, resolveShortCode, toRedirectUrl } from "@/lib/links/resolve-link";
 
 export async function LinkMiddleware(req: NextRequest, key: string) {
-  const link = await resolveShortCode(key);
+  let link: ResolvedLink | null;
+  try {
+    link = await resolveShortCode(key);
+  } catch (error) {
+    // Counting and logging are one statement, so a failed write means no redirect either.
+    console.error("Failed to resolve short link", error);
+    return new NextResponse(null, { status: 503 });
+  }
   const target = link && toRedirectUrl(link.originalUrl);
 
   if (!link || !target) {

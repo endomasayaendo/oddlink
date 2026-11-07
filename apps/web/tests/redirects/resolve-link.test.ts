@@ -75,11 +75,16 @@ describe("resolveShortCode", () => {
     },
   );
 
-  it("accepts an upper-case scheme", async () => {
-    await insertLink("upper-code", "https://example.com", future());
-    await corrupt("upper-code", "HTTPS://example.com");
-    expect(await resolveShortCode("upper-code")).toMatchObject({ originalUrl: "HTTPS://example.com" });
-  });
+  it.each(["HTTPS://example.com", "https:example.com", "http:/example.com"])(
+    "counts and logs %s, which URL parsing treats as http(s)",
+    async (originalUrl) => {
+      const link = await insertLink("odd-code", "https://example.com", future());
+      await corrupt("odd-code", originalUrl);
+      expect(await resolveShortCode("odd-code")).toEqual({ id: link.id, originalUrl });
+      expect(await countOf("odd-code")).toBe(1);
+      expect(await logsOf(link.id)).toBe(1);
+    },
+  );
 
   it("counts and logs concurrent accesses without losing any", async () => {
     const link = await insertLink("busy-code", "https://example.com", future());
