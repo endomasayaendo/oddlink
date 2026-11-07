@@ -38,7 +38,7 @@ export function Shortener() {
 
       {state?.ok && (
         <div className="flex justify-center">
-          <ResultCard shortCode={state.shortCode} shortUrl={state.shortUrl} onError={setCopyError} />
+          <ResultCard key={state.shortCode} shortCode={state.shortCode} shortUrl={state.shortUrl} onError={setCopyError} />
         </div>
       )}
 

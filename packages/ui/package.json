@@ -10,6 +10,7 @@
     "./charts": "./src/charts/index.ts"
   },
   "scripts": {
+    "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -18,11 +19,15 @@
   "devDependencies": {
     "@oddlink/tailwind-config": "workspace:*",
     "@oddlink/tsconfig": "workspace:*",
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/react": "^16.3.3",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "jsdom": "^28.1.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.5"
   },
   "peerDependencies": {
     "react": "19.3.0",
