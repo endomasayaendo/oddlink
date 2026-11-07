@@ -1,11 +1,19 @@
 type Props = {
   message: string;
   onDismiss: () => void;
+  /**
+   * Extra classes for the root, typically outer spacing. Defaults to `mb-6`;
+   * passing a value replaces that default rather than adding to it.
+   */
+  className?: string;
 };
 
-export function ErrorMessage({ message, onDismiss }: Props) {
+export function ErrorMessage({ message, onDismiss, className = "mb-6" }: Props) {
   return (
-    <div className="mb-6 flex animate-fade-in-down items-center gap-3 rounded-lg border border-[#feb2b2] bg-[#fff5f5] px-4 py-3.5">
+    <div
+      role="alert"
+      className={`flex animate-fade-in-down items-center gap-3 rounded-lg border border-[#feb2b2] bg-[#fff5f5] px-4 py-3.5 ${className}`}
+    >
       <span className="flex-1 text-left text-[0.9rem] text-[#c53030]">{message}</span>
       <button
         type="button"
