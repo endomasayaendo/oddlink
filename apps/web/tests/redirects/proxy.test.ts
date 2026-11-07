@@ -20,8 +20,8 @@ const countOf = async (shortCode: string) =>
 
 const logsOf = (urlMappingId: number) => db.$count(accessLog, eq(accessLog.urlMappingId, urlMappingId));
 
-function request(path: string, method = "GET") {
-  return { res: proxy(new NextRequest(`http://localhost:3000${path}`, { method })) };
+function request(path: string, method = "GET", origin = "http://localhost:3000") {
+  return { res: proxy(new NextRequest(`${origin}${path}`, { method })) };
 }
 
 const passesThrough = (res: Response) => res.headers.get("x-middleware-next") === "1";
@@ -40,6 +40,16 @@ describe("proxy redirects", () => {
     const response = await request("/missing-code").res;
     expect(response.status).toBe(302);
     expect(response.headers.get("location")).toBe("http://localhost:3000/not-found");
+  });
+
+  // Behind a proxy, req.url carries the internal host. The not-found redirect must stay on the
+  // request's own host (not BASE_URL): at runtime Next's middleware adapter turns a same-host
+  // redirect into a relative `Location: /not-found`, which the browser resolves against the
+  // public URL. Calling proxy() directly skips the adapter, so the absolute form is seen here.
+  it("keeps the not-found redirect on the request's own host", async () => {
+    const response = await request("/missing-code", "GET", "http://10.0.0.5:3000").res;
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toBe("http://10.0.0.5:3000/not-found");
   });
 
   it("redirects to the not-found page for an expired code without counting it", async () => {
