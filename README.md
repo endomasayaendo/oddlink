@@ -64,7 +64,7 @@ pnpm dev                                 # http://localhost:3000
 | `/` | Shorten a URL (Server Action) and see your recent links (stored in `localStorage`) |
 | `POST /api/issue` | Shorten a URL from anywhere else (see below) |
 | `GET /{shortCode}` | Handled in `proxy.ts`: `302` to the original URL; counts the access and logs it after responding. Unknown or expired codes go to `/not-found` |
-| `/analytics/{shortCode}` | Total clicks, created / expires dates, and daily clicks |
+| `/analytics/{shortCode}` | Total clicks, created / expires dates, and daily clicks. `proxy.ts` checks the code first so unknown codes get a real `404` |
 
 ### `POST /api/issue`
 
@@ -106,10 +106,10 @@ Links expire one year after they are issued.
 oddlink/
 ├── apps/
 │   └── web/                          Next.js app
-│       ├── proxy.ts                  short-link redirects (runs before routing)
+│       ├── proxy.ts                  short-link redirects + analytics 404 check (runs before routing)
 │       ├── app/                      routes only: home, analytics, not-found, api/issue
 │       ├── lib/
-│       │   ├── middleware/           redirect handling used by proxy.ts
+│       │   ├── middleware/           redirect / analytics handling used by proxy.ts
 │       │   ├── links/                issuing, resolving and counting links
 │       │   ├── analytics/            analytics queries
 │       │   ├── actions/              Server Actions
