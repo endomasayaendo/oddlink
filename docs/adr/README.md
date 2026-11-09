@@ -1,45 +1,46 @@
 # Architecture Decision Records
 
-このディレクトリには OddLink の設計判断を ADR（Architecture Decision Record）として残します。
-「何を選んだか」だけでなく「なぜ・何と比べて・何を諦めたか」を後から追えるようにするのが目的です。
+This directory records OddLink's design decisions as ADRs (Architecture Decision Records).
+The goal is to make it possible to trace later not only "what was chosen" but also "why, compared with what, and what was given up".
 
-## 運用ルール
+## Rules
 
-- 1 判断 1 ファイル。ファイル名は `NNNN-短い-kebab-case.md`（連番は欠番にしない）。
-- ステータスは `Proposed`（提案中）→ `Accepted`（採用）/ `Rejected`（不採用）。採用後に覆すときは元の ADR を書き換えず、新しい ADR を作って旧 ADR を `Superseded by NNNN` にする。
-- 最終決定はオーナーが行う。ADR の作成者は推奨案を書くところまで。
-- 外部サービスの料金・制限は変わるので、出典 URL と確認日を必ず書く。確認できなかった事実は「未確認」と明記し、判断の根拠にしない。
-- このリポジトリは公開されている。レート制限の閾値、不正利用の検知方法、秘密情報、未修正の脆弱性は書かない。
+- One decision per file. File names are `NNNN-short-kebab-case.md` (numbers are sequential, with no gaps).
+- ADRs are written in English.
+- Status moves from `Proposed` to `Accepted` or `Rejected`. To overturn an accepted ADR, do not rewrite it: write a new ADR and mark the old one `Superseded by NNNN`.
+- The owner makes the final decision. The author of an ADR goes only as far as writing the recommended option.
+- Prices and limits of external services change, so always write the source URL and the date checked. Facts that could not be verified are marked "Unverified" and are not used as grounds for the decision.
+- This repository is public. Do not write rate-limit thresholds, abuse-detection methods, secrets, or unfixed vulnerabilities.
 
-## テンプレート
+## Template
 
 ```markdown
-# NNNN. タイトル
+# NNNN. Title
 
-- ステータス: Proposed
-- 日付: YYYY-MM-DD
-- 関連: #issue
+- Status: Proposed
+- Date: YYYY-MM-DD
+- Related: #issue
 
-## 背景
-（プロダクトとして何が必要か。技術より先に、ユーザー・機能・予算の要求から書く）
+## Context
+(What the product needs. Start from user, feature and budget requirements, before technology)
 
-## 判断に効く要件
-（must / should）
+## Requirements
+(must / should)
 
-## 選択肢
-（それぞれ: 確認済みの事実と出典、できること、できなくなること、コスト、このリポジトリで必要な変更、ロックイン）
+## Options
+(For each: verified facts and sources, what it gives us, what it rules out, cost, changes needed in this repository, lock-in)
 
-## 提案
-（推奨案と理由、次点と乗り換える条件）
+## Decision (proposed)
+(The recommended option and why; the runner-up and the conditions for switching to it)
 
-## 影響
-（既存 issue・CI・環境変数への影響、作るべき follow-up issue）
+## Consequences
+(Impact on existing issues, CI and environment variables; follow-up issues to create)
 
-## 未確認事項・リスク
+## Open questions / risks
 ```
 
-## 一覧
+## Index
 
-| # | タイトル | ステータス |
+| # | Title | Status |
 |---|---|---|
-| [0001](0001-deploy-target.md) | デプロイ先（ホスティングと Postgres） | Proposed |
+| [0001](0001-deploy-target.md) | Deploy target (hosting and Postgres) | Proposed |
