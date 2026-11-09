@@ -8,15 +8,26 @@ import { HistoryList } from "./history-list";
 import { ResultCard } from "./result-card";
 import { UrlForm } from "./url-form";
 
+type IssueFailure = Extract<NonNullable<IssueState>, { ok: false }>;
+
+// Client-only: failures also carry the submitted URL so the input can be restored.
+type FormState = Exclude<IssueState, IssueFailure> | (IssueFailure & { submitted: string });
+
 export function Shortener() {
   const { history, addEntry, removeEntry } = useHistory();
   const [copyError, setCopyError] = useState("");
-  const [dismissed, setDismissed] = useState<IssueState>(null);
+  const [dismissed, setDismissed] = useState<FormState>(null);
 
-  const [state, formAction, pending] = useActionState(async (prev: IssueState, formData: FormData) => {
+  const [state, formAction, pending] = useActionState(async (prev: FormState, formData: FormData): Promise<FormState> => {
     setCopyError("");
     const next = await issueAction(prev, formData);
     if (next?.ok) addEntry({ shortCode: next.shortCode, shortUrl: next.shortUrl, originalUrl: next.originalUrl });
+    // React resets the form after every action, so a failed submit would wipe the input unless
+    // the value travels in the returned state and is fed back as the input's defaultValue.
+    if (next && !next.ok) {
+      const submitted = formData.get("originalUrl");
+      return { ...next, submitted: typeof submitted === "string" ? submitted : "" };
+    }
     return next;
   }, null);
 
@@ -24,7 +35,7 @@ export function Shortener() {
 
   return (
     <>
-      <UrlForm action={formAction} pending={pending} />
+      <UrlForm action={formAction} pending={pending} defaultValue={state && !state.ok ? state.submitted : ""} />
 
       {error && (
         <ErrorMessage
