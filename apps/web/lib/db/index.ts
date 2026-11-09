@@ -1,5 +1,6 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
+import { getEnv } from "@/lib/env";
 import * as schema from "./schema";
 
 // Redirects sit on the hot path, so a stuck DB should fail fast instead of hanging the request.
@@ -11,7 +12,7 @@ export function createPool(): Pool {
   // deploy target is chosen: serverless needs a small `max` or an external pooler, and some
   // poolers reject `statement_timeout` as a startup parameter.
   const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
+    connectionString: getEnv().DATABASE_URL,
     connectionTimeoutMillis: CONNECTION_TIMEOUT_MS,
     // Server-side, so Postgres cancels the query itself (`query_timeout` only stops the client waiting).
     statement_timeout: STATEMENT_TIMEOUT_MS,
