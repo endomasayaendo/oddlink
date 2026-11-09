@@ -16,19 +16,25 @@ export type Analytics = {
 };
 
 export async function getAnalytics(shortCode: string): Promise<Analytics | null> {
-  const mapping = await db.query.urlMappings.findFirst({ where: eq(urlMappings.shortCode, shortCode) });
-  if (!mapping) return null;
-
   // Days are counted in APP_TIME_ZONE rather than the database server's zone.
   const day = sql<string>`to_char((${accessLog.accessedAt} AT TIME ZONE ${APP_TIME_ZONE})::date, 'YYYY-MM-DD')`;
-  const dailyAccess = await db
+  const dailyQuery = db
     .select({ date: day, count: sql<number>`count(*)::int` })
     .from(accessLog)
-    .where(eq(accessLog.urlMappingId, mapping.id))
+    // Filter by short code (not mapping.id) so this can run alongside the mapping lookup.
+    .innerJoin(urlMappings, eq(accessLog.urlMappingId, urlMappings.id))
+    .where(eq(urlMappings.shortCode, shortCode))
     // By position: the time zone is bound as a separate parameter in each clause,
     // so Postgres wouldn't treat repeated expressions as the same.
     .groupBy(sql`1`)
     .orderBy(sql`1`);
+
+  // Separate pool connections, so not one snapshot; an in-flight access may show in one but not the other.
+  const [mapping, dailyAccess] = await Promise.all([
+    db.query.urlMappings.findFirst({ where: eq(urlMappings.shortCode, shortCode) }),
+    dailyQuery,
+  ]);
+  if (!mapping) return null;
 
   return {
     shortCode: mapping.shortCode,
