@@ -142,6 +142,8 @@ Run from the repository root; Turborepo runs each task in every package that def
 | `pnpm db:generate` | Generate a migration after changing `apps/web/lib/db/schema.ts` |
 | `pnpm db:migrate` | Apply migrations |
 
+CI (GitHub Actions) runs lint, typecheck, build and test on every pull request and push to `main`.
+
 ---
 
 ## Environment Variables
