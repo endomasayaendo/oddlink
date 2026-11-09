@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { shortCodeExists } from "@/lib/analytics/short-code-exists";
 import { isPossibleShortCode } from "@/lib/middleware/utils/is-possible-short-code";
 import { isReservedKey } from "@/lib/middleware/utils/is-reserved-key";
+import { rewriteNotFound } from "@/lib/middleware/utils/rewrite-not-found";
 
 /**
  * Answers unknown codes with a real 404 before the page renders. The analytics page
@@ -25,5 +26,5 @@ export async function AnalyticsMiddleware(req: NextRequest, shortCode: string) {
 }
 
 function notFound(req: NextRequest) {
-  return NextResponse.rewrite(new URL("/analytics/not-found", req.url));
+  return rewriteNotFound(req, "/analytics/not-found");
 }
