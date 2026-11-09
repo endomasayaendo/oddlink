@@ -82,12 +82,45 @@ describe("proxy redirects", () => {
     expect(console.error).toHaveBeenCalled();
   });
 
-  it.each(["/foo", "/analytics", "/api", "/foo.bar", "/robots.txt", "/_x", "/_next"])(
+  it.each(["/foo", "/analytics", "/api", "/_x", "/_next"])(
     "treats %s as a short code and sends it to the not-found page, like before",
     async (path) => {
       expect((await request(path).res).headers.get("location")).toBe("http://localhost:3000/not-found");
     },
   );
+
+  it.each([
+    ["a NUL", "/%00"],
+    ["a tab", "/%09"],
+    ["DEL", "/%7F"],
+    ["a key over 255 characters", `/${"a".repeat(256)}`],
+    ["a key over 255 code points", `/${encodeURIComponent("😀".repeat(256))}`],
+    ["a file name", "/robots.txt"],
+    ["a dotted key", "/foo.bar"],
+    ["an icon path", "/apple-touch-icon.png"],
+  ])("sends %s to the not-found page without touching the database", async (_, path) => {
+    const execute = vi.spyOn(db, "execute");
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const response = await request(path).res;
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toBe("http://localhost:3000/not-found");
+    expect(execute).not.toHaveBeenCalled();
+    expect(consoleError).not.toHaveBeenCalled();
+    expect(await db.$count(accessLog)).toBe(0);
+  });
+
+  it.each([
+    ["a generated phrase", "golden-clock-whispers-to-silent-butterfly"],
+    ["a 255-character code", "a".repeat(255)],
+    ["a 255-code-point code", "😀".repeat(255)],
+  ])("still redirects and counts %s", async (_, code) => {
+    const link = await insertLink(code, "https://example.com/target", future());
+    const response = await request(`/${encodeURIComponent(code)}`).res;
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toBe("https://example.com/target");
+    expect(await countOf(code)).toBe(1);
+    expect(await logsOf(link.id)).toBe(1);
+  });
 
   it("counts HEAD requests like GET", async () => {
     await insertLink("head-code", "https://example.com", future());
@@ -134,6 +167,8 @@ describe("proxy analytics check", () => {
     ["an undecodable code", "/analytics/%E0%A4%A"],
     ["a reserved key", "/analytics/not-found"],
     ["a code longer than the column", `/analytics/${"a".repeat(256)}`],
+    ["a code with a NUL", "/analytics/%00"],
+    ["a code with a dot", "/analytics/foo.bar"],
   ])("rewrites %s to the static 404 page", async (_, path) => {
     expect(rewriteOf(await request(path).res)).toBe("http://localhost:3000/analytics/not-found");
   });
