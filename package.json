@@ -1,6 +1,9 @@
 {
   "name": "oddlink-monorepo",
   "private": true,
+  "engines": {
+    "node": "^22.12.0 || ^24.0.0 || >=26.0.0"
+  },
   "scripts": {
     "build": "turbo build",
     "dev": "turbo dev",

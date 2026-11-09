@@ -43,7 +43,7 @@ smoke-gently-carries-blue-key
 
 ## Getting Started
 
-**Prerequisites:** Node.js 20.12+, pnpm 12 (`npm i -g pnpm`), Docker
+**Prerequisites:** Node.js 22.12+ (`.nvmrc` pins 26 — run `nvm use`), pnpm 12 (`npm i -g pnpm`), Docker
 
 ```bash
 git clone https://github.com/endomasayaendo/oddlink.git
