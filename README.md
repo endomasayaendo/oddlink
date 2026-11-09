@@ -63,7 +63,7 @@ pnpm dev                                 # http://localhost:3000
 |---|---|
 | `/` | Shorten a URL (Server Action) and see your recent links (stored in `localStorage`) |
 | `POST /api/issue` | Shorten a URL from anywhere else (see below) |
-| `GET /{shortCode}` | Handled in `proxy.ts`: `302` to the original URL; counts the access and logs it after responding. Unknown or expired codes go to `/not-found` |
+| `GET /{shortCode}` | Handled in `proxy.ts`: counts and logs the access in one SQL statement, then `302`s to the original URL (`503` if that write fails). Unknown or expired codes get a real `404` |
 | `/analytics/{shortCode}` | Total clicks, created / expires dates, and daily clicks. `proxy.ts` checks the code first so unknown codes get a real `404` |
 
 ### `POST /api/issue`

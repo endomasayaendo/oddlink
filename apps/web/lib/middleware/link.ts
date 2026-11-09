@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { type ResolvedLink, resolveShortCode, toRedirectUrl } from "@/lib/links/resolve-link";
 import { isPossibleShortCode } from "@/lib/middleware/utils/is-possible-short-code";
+import { rewriteNotFound } from "@/lib/middleware/utils/rewrite-not-found";
 
 export async function LinkMiddleware(req: NextRequest, key: string) {
   // Keys that can't be a short code never reach the DB (a NUL there would even fail the query).
@@ -21,9 +22,7 @@ export async function LinkMiddleware(req: NextRequest, key: string) {
   return NextResponse.redirect(target, 302);
 }
 
+// Unknown and expired codes both get a real 404 from the static page, under the requested URL.
 function notFound(req: NextRequest) {
-  // Safe behind a proxy: Next's middleware adapter rewrites a same-host redirect into a
-  // relative `Location: /not-found`, so the internal host in req.url never reaches the browser.
-  // Don't return a literal relative Location instead; the adapter parses it without a base and throws.
-  return NextResponse.redirect(new URL("/not-found", req.url), 302);
+  return rewriteNotFound(req, "/not-found");
 }

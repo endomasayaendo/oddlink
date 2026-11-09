@@ -4,6 +4,7 @@ import { NextRequest } from "next/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { db } from "@/lib/db";
 import { accessLog, urlMappings } from "@/lib/db/schema";
+import { NOT_FOUND_CACHE_CONTROL } from "@/lib/middleware/utils/rewrite-not-found";
 import { config, proxy } from "@/proxy";
 import { resetUrlTables } from "../utils/reset-db";
 
@@ -20,11 +21,19 @@ const countOf = async (shortCode: string) =>
 
 const logsOf = (urlMappingId: number) => db.$count(accessLog, eq(accessLog.urlMappingId, urlMappingId));
 
-function request(path: string, method = "GET", origin = "http://localhost:3000") {
-  return { res: proxy(new NextRequest(`${origin}${path}`, { method })) };
+function request(path: string, method = "GET") {
+  return { res: proxy(new NextRequest(`http://localhost:3000${path}`, { method })) };
 }
 
 const passesThrough = (res: Response) => res.headers.get("x-middleware-next") === "1";
+const rewriteOf = (res: Response) => res.headers.get("x-middleware-rewrite");
+
+// Unknown and expired codes are served the static 404 page under the requested URL, uncached.
+function expectNotFound(res: Response, page = "http://localhost:3000/not-found") {
+  expect(rewriteOf(res)).toBe(page);
+  expect(res.headers.get("location")).toBeNull();
+  expect(res.headers.get("cache-control")).toBe(NOT_FOUND_CACHE_CONTROL);
+}
 
 describe("proxy redirects", () => {
   it("redirects to the original URL and has counted and logged the access by then", async () => {
@@ -36,46 +45,36 @@ describe("proxy redirects", () => {
     expect(await logsOf(link.id)).toBe(1);
   });
 
-  it("redirects to the not-found page for an unknown code", async () => {
-    const response = await request("/missing-code").res;
-    expect(response.status).toBe(302);
-    expect(response.headers.get("location")).toBe("http://localhost:3000/not-found");
+  it("serves the 404 page for an unknown code", async () => {
+    expectNotFound(await request("/missing-code").res);
   });
 
-  // Behind a proxy, req.url carries the internal host. The not-found redirect must stay on the
-  // request's own host (not BASE_URL): at runtime Next's middleware adapter turns a same-host
-  // redirect into a relative `Location: /not-found`, which the browser resolves against the
-  // public URL. Calling proxy() directly skips the adapter, so the absolute form is seen here.
-  it("keeps the not-found redirect on the request's own host", async () => {
-    const response = await request("/missing-code", "GET", "http://10.0.0.5:3000").res;
-    expect(response.status).toBe(302);
-    expect(response.headers.get("location")).toBe("http://10.0.0.5:3000/not-found");
+  it("serves the 404 page for an unknown code on HEAD", async () => {
+    expectNotFound(await request("/missing-code", "HEAD").res);
   });
 
-  it("redirects to the not-found page for an expired code without counting it", async () => {
+  it("serves the 404 page for an expired code without counting it", async () => {
     const link = await insertLink("old-code", "https://example.com", past());
-    expect((await request("/old-code").res).headers.get("location")).toBe("http://localhost:3000/not-found");
+    expectNotFound(await request("/old-code").res);
     expect(await countOf("old-code")).toBe(0);
     expect(await logsOf(link.id)).toBe(0);
   });
 
-  it("redirects to the not-found page when the stored URL is unusable, without counting it", async () => {
+  it("serves the 404 page when the stored URL is unusable, without counting it", async () => {
     const link = await insertLink("bad-code", "https://example.com", future());
     await db.execute(sql`UPDATE url_mappings SET original_url = 'javascript:alert(1)' WHERE short_code = 'bad-code'`);
-    expect((await request("/bad-code").res).headers.get("location")).toBe("http://localhost:3000/not-found");
+    expectNotFound(await request("/bad-code").res);
     expect(await countOf("bad-code")).toBe(0);
     expect(await logsOf(link.id)).toBe(0);
   });
 
   // Counted and logged like any http(s) row (SQL can't tell), but toRedirectUrl refuses to redirect.
-  it("redirects to the not-found page when the stored URL has userinfo", async () => {
+  it("serves the 404 page when the stored URL has userinfo", async () => {
     await insertLink("phish-code", "https://example.com", future());
     await db.execute(
       sql`UPDATE url_mappings SET original_url = 'https://google.com@evil.example' WHERE short_code = 'phish-code'`,
     );
-    const response = await request("/phish-code").res;
-    expect(response.status).toBe(302);
-    expect(response.headers.get("location")).toBe("http://localhost:3000/not-found");
+    expectNotFound(await request("/phish-code").res);
   });
 
   it("redirects a stored URL without // the way URL parsing reads it, and counts it", async () => {
@@ -94,9 +93,9 @@ describe("proxy redirects", () => {
   });
 
   it.each(["/foo", "/analytics", "/api", "/_x", "/_next"])(
-    "treats %s as a short code and sends it to the not-found page, like before",
+    "treats %s as a short code and serves the 404 page for it",
     async (path) => {
-      expect((await request(path).res).headers.get("location")).toBe("http://localhost:3000/not-found");
+      expectNotFound(await request(path).res);
     },
   );
 
@@ -109,12 +108,10 @@ describe("proxy redirects", () => {
     ["a file name", "/robots.txt"],
     ["a dotted key", "/foo.bar"],
     ["an icon path", "/apple-touch-icon.png"],
-  ])("sends %s to the not-found page without touching the database", async (_, path) => {
+  ])("serves the 404 page for %s without touching the database", async (_, path) => {
     const execute = vi.spyOn(db, "execute");
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
-    const response = await request(path).res;
-    expect(response.status).toBe(302);
-    expect(response.headers.get("location")).toBe("http://localhost:3000/not-found");
+    expectNotFound(await request(path).res);
     expect(execute).not.toHaveBeenCalled();
     expect(consoleError).not.toHaveBeenCalled();
     expect(await db.$count(accessLog)).toBe(0);
@@ -157,7 +154,6 @@ describe("proxy redirects", () => {
 });
 
 describe("proxy analytics check", () => {
-  const rewriteOf = (res: Response) => res.headers.get("x-middleware-rewrite");
 
   it("lets an existing code reach the analytics page", async () => {
     await insertLink("stats-code", "https://example.com", future());
@@ -170,8 +166,7 @@ describe("proxy analytics check", () => {
   });
 
   it("rewrites an unknown code to the static 404 page", async () => {
-    const response = await request("/analytics/missing-code").res;
-    expect(rewriteOf(response)).toBe("http://localhost:3000/analytics/not-found");
+    expectNotFound(await request("/analytics/missing-code").res, "http://localhost:3000/analytics/not-found");
   });
 
   it.each([
@@ -181,7 +176,7 @@ describe("proxy analytics check", () => {
     ["a code with a NUL", "/analytics/%00"],
     ["a code with a dot", "/analytics/foo.bar"],
   ])("rewrites %s to the static 404 page", async (_, path) => {
-    expect(rewriteOf(await request(path).res)).toBe("http://localhost:3000/analytics/not-found");
+    expectNotFound(await request(path).res, "http://localhost:3000/analytics/not-found");
   });
 
   it("decodes the code like the page's params", async () => {
