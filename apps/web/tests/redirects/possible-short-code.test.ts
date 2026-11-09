@@ -30,7 +30,8 @@ describe("isPossibleShortCode", () => {
 
   it("accepts every phrase the generator can produce from the seeded words", async () => {
     const words = await getWords();
-    const STEPS = 60; // more than the longest word list, so every word is picked at least once
+    // At least as many steps as the longest list has words, so every word is picked at least once.
+    const STEPS = Math.max(...Object.values(words).map((list) => list.length));
     for (let pattern = 0; pattern < PATTERN_COUNT; pattern++) {
       for (let step = 0; step < STEPS; step++) {
         // The first random() call picks the pattern, every later one picks a word.
