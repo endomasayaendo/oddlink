@@ -9,6 +9,7 @@ import { isReservedKey } from "@/lib/middleware/utils/is-reserved-key";
  * `shortCode` is `""` when the path segment couldn't be decoded.
  */
 export async function AnalyticsMiddleware(req: NextRequest, shortCode: string) {
+  // Anything longer than the short_code column can't be a code; skip the lookup.
   if (!shortCode || shortCode.length > SHORT_CODE_MAX_LENGTH || isReservedKey(shortCode)) {
     return notFound(req);
   }
