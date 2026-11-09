@@ -3,7 +3,9 @@ import { parseEnv, resolveMode } from "@/lib/env";
 
 const PASSWORD = "s3cr3t-pa55";
 const validDb = `postgres://app:${PASSWORD}@db.example.com:5432/oddlink`;
-const runtimeEnv = { BASE_URL: "https://oddl.ink", DATABASE_URL: validDb };
+const SIGNING_SECRET = "k3y-".repeat(8) + "abcd";
+const runtimeEnv = { BASE_URL: "https://oddl.ink", DATABASE_URL: validDb, LINK_SIGNING_SECRET: SIGNING_SECRET };
+const DEV_SECRET = expect.stringMatching(/^oddlink-dev-only-/);
 
 function messageOf(fn: () => unknown): string {
   try {
@@ -41,47 +43,50 @@ describe("required values", () => {
       BASE_URL: "https://oddl.ink",
       DATABASE_URL: validDb,
       APP_TIME_ZONE: "Asia/Tokyo",
+      LINK_SIGNING_SECRET: SIGNING_SECRET,
     });
   });
 
-  it("requires BASE_URL and DATABASE_URL at runtime and lists both", () => {
+  it("requires BASE_URL, DATABASE_URL and LINK_SIGNING_SECRET at runtime and lists all", () => {
     const message = messageOf(() => parseEnv({}, "runtime"));
     expect(message).toMatch(/^Invalid environment variables:/);
     expect(message).toContain("- BASE_URL:");
     expect(message).toContain("- DATABASE_URL:");
+    expect(message).toContain("- LINK_SIGNING_SECRET: is required in production");
   });
 
   it("lists only the missing variable", () => {
-    const message = messageOf(() => parseEnv({ DATABASE_URL: validDb }, "runtime"));
+    const message = messageOf(() => parseEnv({ DATABASE_URL: validDb, LINK_SIGNING_SECRET: SIGNING_SECRET }, "runtime"));
     expect(message).toContain("- BASE_URL:");
     expect(message).not.toContain("- DATABASE_URL:");
+    expect(message).not.toContain("- LINK_SIGNING_SECRET:");
   });
 
   it("treats empty strings as missing", () => {
-    const message = messageOf(() => parseEnv({ BASE_URL: "", DATABASE_URL: "" }, "runtime"));
+    const message = messageOf(() => parseEnv({ BASE_URL: "", DATABASE_URL: "", LINK_SIGNING_SECRET: "" }, "runtime"));
     expect(message).toContain("- BASE_URL:");
     expect(message).toContain("- DATABASE_URL:");
-    expect(parseEnv({ BASE_URL: "", APP_TIME_ZONE: "" }, "lenient")).toEqual({
+    expect(message).toContain("- LINK_SIGNING_SECRET:");
+    expect(parseEnv({ BASE_URL: "", APP_TIME_ZONE: "", LINK_SIGNING_SECRET: "" }, "lenient")).toEqual({
       BASE_URL: "http://localhost:3000",
       DATABASE_URL: undefined,
       APP_TIME_ZONE: "Asia/Tokyo",
+      LINK_SIGNING_SECRET: DEV_SECRET,
     });
   });
 
   it("falls back to defaults in build and lenient modes", () => {
-    for (const mode of ["build", "lenient"] as const) {
-      expect(parseEnv({}, mode)).toEqual({
-        BASE_URL: "http://localhost:3000",
-        DATABASE_URL: undefined,
-        APP_TIME_ZONE: "Asia/Tokyo",
-      });
-    }
+    const defaults = { BASE_URL: "http://localhost:3000", DATABASE_URL: undefined, APP_TIME_ZONE: "Asia/Tokyo" };
+    // The build signs nothing, so it tolerates a missing secret; dev and tests get a fixed dev key.
+    expect(parseEnv({}, "build")).toEqual({ ...defaults, LINK_SIGNING_SECRET: undefined });
+    expect(parseEnv({}, "lenient")).toEqual({ ...defaults, LINK_SIGNING_SECRET: DEV_SECRET });
   });
 
   it("still rejects malformed values in build mode", () => {
     expect(() => parseEnv({ BASE_URL: "not a url" }, "build")).toThrow("- BASE_URL:");
     expect(() => parseEnv({ DATABASE_URL: "mysql://x" }, "build")).toThrow("- DATABASE_URL:");
     expect(() => parseEnv({ APP_TIME_ZONE: "Mars/Olympus" }, "build")).toThrow("- APP_TIME_ZONE:");
+    expect(() => parseEnv({ LINK_SIGNING_SECRET: "short" }, "build")).toThrow("- LINK_SIGNING_SECRET:");
   });
 });
 
@@ -148,7 +153,34 @@ describe("DATABASE_URL", () => {
   );
 });
 
+describe("LINK_SIGNING_SECRET", () => {
+  it("accepts 32 characters and keeps the value as given", () => {
+    const secret = "a".repeat(32);
+    for (const mode of ["build", "runtime", "lenient"] as const) {
+      expect(parseEnv({ ...runtimeEnv, LINK_SIGNING_SECRET: secret }, mode).LINK_SIGNING_SECRET).toBe(secret);
+    }
+  });
+
+  it("rejects anything shorter than 32 characters in every mode", () => {
+    for (const mode of ["build", "runtime", "lenient"] as const) {
+      const message = messageOf(() => parseEnv({ ...runtimeEnv, LINK_SIGNING_SECRET: "a".repeat(31) }, mode));
+      expect(message).toContain("- LINK_SIGNING_SECRET: must be at least 32 characters");
+    }
+  });
+});
+
 describe("secret redaction", () => {
+  it("never echoes LINK_SIGNING_SECRET, too short or valid", () => {
+    const short = "sh0rt-s1gn1ng-k3y";
+    for (const mode of ["build", "runtime", "lenient"] as const) {
+      const message = messageOf(() => parseEnv({ ...runtimeEnv, LINK_SIGNING_SECRET: short }, mode));
+      expect(message).toContain("- LINK_SIGNING_SECRET:");
+      expect(message).not.toContain(short);
+    }
+    const message = messageOf(() => parseEnv({ ...runtimeEnv, BASE_URL: "ftp://x" }, "runtime"));
+    expect(message).not.toContain(SIGNING_SECRET);
+  });
+
   it("never echoes a malformed DATABASE_URL, which may hold a password", () => {
     const bad = `mysql://app:${PASSWORD}@db.example.com/oddlink`;
     for (const mode of ["build", "runtime", "lenient"] as const) {

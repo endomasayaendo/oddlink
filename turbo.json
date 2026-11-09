@@ -4,13 +4,13 @@
     "build": {
       "dependsOn": ["^build"],
       "inputs": ["$TURBO_DEFAULT$", ".env*"],
-      "env": ["DATABASE_URL", "BASE_URL", "APP_TIME_ZONE"],
+      "env": ["DATABASE_URL", "BASE_URL", "APP_TIME_ZONE", "LINK_SIGNING_SECRET"],
       "outputs": [".next/**", "!.next/cache/**", "dist/**"]
     },
     "dev": {
       "cache": false,
       "persistent": true,
-      "passThroughEnv": ["DATABASE_URL", "BASE_URL", "APP_TIME_ZONE"]
+      "passThroughEnv": ["DATABASE_URL", "BASE_URL", "APP_TIME_ZONE", "LINK_SIGNING_SECRET"]
     },
     "lint": {
       "dependsOn": ["^lint"]

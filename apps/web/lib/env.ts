@@ -12,12 +12,17 @@ export type Env = {
   DATABASE_URL: string | undefined;
   /** IANA time zone used for daily click counts. */
   APP_TIME_ZONE: string;
+  /** HMAC key for reroll tokens. Only guaranteed to be present in `runtime` and `lenient` modes. */
+  LINK_SIGNING_SECRET: string | undefined;
 };
 
 type EnvSource = Record<string, string | undefined>;
 
 const DEFAULT_BASE_URL = "http://localhost:3000";
 const DEFAULT_TIME_ZONE = "Asia/Tokyo";
+// Dev and tests only: a fixed, public key, so tokens survive dev server restarts. Production must set its own.
+const DEV_LINK_SIGNING_SECRET = "oddlink-dev-only-link-signing-secret-do-not-use-in-production";
+export const LINK_SIGNING_SECRET_MIN_LENGTH = 32;
 
 /**
  * - `build`: `next build` (Next sets NEXT_PHASE during it, and build workers inherit it). CI builds
@@ -93,6 +98,11 @@ const timeZoneValue = z.string().refine(
   { error: "must be an IANA time zone name such as Asia/Tokyo or UTC" },
 );
 
+// The message must never include the value: it is a key.
+const signingSecretValue = z.string().refine((value) => value.length >= LINK_SIGNING_SECRET_MIN_LENGTH, {
+  error: `must be at least ${LINK_SIGNING_SECRET_MIN_LENGTH} characters (generate one with: openssl rand -base64 32)`,
+});
+
 function buildSchema(mode: EnvMode) {
   const baseUrl =
     mode === "runtime" ? requiredWhen(mode, "BASE_URL").pipe(baseUrlValue) : baseUrlValue;
@@ -109,18 +119,28 @@ function buildSchema(mode: EnvMode) {
       mode === "runtime" ? databaseUrl : databaseUrl.optional(),
     ),
     APP_TIME_ZONE: z.preprocess(emptyAsUnset, timeZoneValue.default(DEFAULT_TIME_ZONE)),
+    LINK_SIGNING_SECRET: z.preprocess(
+      emptyAsUnset,
+      mode === "runtime"
+        ? requiredWhen(mode, "LINK_SIGNING_SECRET").pipe(signingSecretValue)
+        : mode === "lenient"
+          ? signingSecretValue.default(DEV_LINK_SIGNING_SECRET)
+          : signingSecretValue.optional(),
+    ),
   });
 }
 
 /**
  * Validates the environment and throws one Error listing every problem. Messages are built from
- * issue paths and our own text only, never from the input values: DATABASE_URL holds a password.
+ * issue paths and our own text only, never from the input values: DATABASE_URL holds a password
+ * and LINK_SIGNING_SECRET is a key.
  */
 export function parseEnv(source: EnvSource, mode: EnvMode): Env {
   const result = buildSchema(mode).safeParse({
     BASE_URL: source.BASE_URL,
     DATABASE_URL: source.DATABASE_URL,
     APP_TIME_ZONE: source.APP_TIME_ZONE,
+    LINK_SIGNING_SECRET: source.LINK_SIGNING_SECRET,
   });
   if (!result.success) {
     const lines = result.error.issues.map((issue) => `- ${issue.path.join(".")}: ${issue.message}`);

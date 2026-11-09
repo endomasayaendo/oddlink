@@ -43,6 +43,7 @@ describe("checkEnvAtStartup", () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("BASE_URL", "https://oddl.ink");
     vi.stubEnv("DATABASE_URL", "postgres://u:p@h/db");
+    vi.stubEnv("LINK_SIGNING_SECRET", "x".repeat(32));
     const exit = vi.spyOn(process, "exit").mockImplementation((() => undefined) as never);
 
     (await load())();
