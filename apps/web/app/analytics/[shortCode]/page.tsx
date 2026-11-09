@@ -3,13 +3,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { getAnalytics } from "@/lib/analytics/get-analytics";
-import { APP_TIME_ZONE } from "@/lib/constants";
+import { formatDate } from "@/lib/format-date";
 import { StatCard } from "@/ui/analytics/stat-card";
-
-function formatDate(date: Date | null): string {
-  if (!date) return "-";
-  return date.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric", timeZone: APP_TIME_ZONE });
-}
 
 // "2026-01-02" -> "Jan 2"; the date is already in APP_TIME_ZONE, so format it as UTC.
 function formatDay(day: string): string {

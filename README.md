@@ -64,6 +64,7 @@ pnpm dev                                 # http://localhost:3000
 | `/` | Shorten a URL (Server Action) and see your recent links (stored in `localStorage`) |
 | `POST /api/issue` | Shorten a URL from anywhere else (see below) |
 | `GET /{shortCode}` | Handled in `proxy.ts`: counts and logs the access in one SQL statement, then `302`s to the original URL (`503` if that write fails). Unknown or expired codes get a real `404` |
+| `GET /{shortCode}+` | Preview page (rewritten to `/preview/{shortCode}`): shows the destination host and full address, created / expires dates and total clicks, and a "Continue" button that goes through the short link itself. Viewing it never counts as a click. Unknown, unusable or malformed codes get a real `404`; expired links get a page with an "Expired" banner and no button. `no-store`, `noindex`. A transparency feature for the person holding the link, not an abuse filter |
 | `/analytics/{shortCode}` | Total clicks, created / expires dates, and daily clicks. `proxy.ts` checks the code first so unknown codes get a real `404` |
 
 ### `POST /api/issue`
@@ -106,10 +107,10 @@ Links expire one year after they are issued.
 oddlink/
 ├── apps/
 │   └── web/                          Next.js app
-│       ├── proxy.ts                  short-link redirects + analytics 404 check (runs before routing)
-│       ├── app/                      routes only: home, analytics, not-found, api/issue
+│       ├── proxy.ts                  short-link redirects, `+` previews and the analytics 404 check (runs before routing)
+│       ├── app/                      routes only: home, analytics, preview, not-found, api/issue
 │       ├── lib/
-│       │   ├── middleware/           redirect / analytics handling used by proxy.ts
+│       │   ├── middleware/           redirect / preview / analytics handling used by proxy.ts
 │       │   ├── links/                issuing, resolving and counting links
 │       │   ├── analytics/            analytics queries
 │       │   ├── actions/              Server Actions
