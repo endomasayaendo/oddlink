@@ -107,6 +107,13 @@ describe("BASE_URL", () => {
     expect(parse("https://example.com/app/")).toBe("https://example.com/app");
     expect(parse("http://localhost:3000")).toBe("http://localhost:3000");
   });
+
+  it("returns the normalized URL, not the raw string", () => {
+    expect(parse(" https://example.com\n")).toBe("https://example.com");
+    expect(parse("https:\\\\example.com\\app")).toBe("https://example.com/app");
+    expect(parse("HTTPS://Example.COM:443/")).toBe("https://example.com");
+    expect(parse("https://example.com/a b/")).toBe("https://example.com/a%20b");
+  });
 });
 
 describe("APP_TIME_ZONE", () => {

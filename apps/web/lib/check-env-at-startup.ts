@@ -3,9 +3,9 @@ import { getEnv, resolveMode } from "@/lib/env";
 /**
  * Validates the environment when the server starts (called from instrumentation.ts).
  *
- * Next only logs a throwing register() and keeps serving 500s, which restart policies and health
- * checks may not notice. In production, exit so the deploy fails visibly. In dev, rethrow so the
- * error shows up without killing the dev server.
+ * `next start` only logs a throwing register() and keeps serving 500s, which restart policies and
+ * health checks may not notice, so in production exit so the deploy fails visibly. Elsewhere just
+ * rethrow and let Next decide (as of 16.4, `next dev` prints the error and exits by itself).
  */
 export function checkEnvAtStartup() {
   try {

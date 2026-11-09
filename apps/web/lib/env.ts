@@ -68,8 +68,10 @@ const baseUrlValue = z.string().transform((raw, ctx) => {
     ctx.addIssue({ code: "custom", message: "must not contain a query string or fragment" });
     return z.NEVER;
   }
-  // Keep the path prefix (e.g. https://example.com/app) but drop every trailing slash.
-  return raw.replace(/\/+$/, "");
+  // Build from the parsed URL, not `raw`: the parser silently strips surrounding whitespace and
+  // newlines (common in copied secrets) and rewrites backslashes, which would otherwise leak into
+  // every short link. Keep the path prefix (e.g. https://example.com/app) but drop trailing slashes.
+  return `${url.origin}${url.pathname}`.replace(/\/+$/, "");
 });
 
 const databaseUrlValue = z
