@@ -1,15 +1,17 @@
 type Props = {
   action: (formData: FormData) => void;
   pending: boolean;
+  defaultValue?: string;
 };
 
-export function UrlForm({ action, pending }: Props) {
+export function UrlForm({ action, pending, defaultValue }: Props) {
   return (
     <form action={action} className="mb-6 flex flex-col gap-2 sm:flex-row">
       <input
         type="url"
         name="originalUrl"
         placeholder="Enter your URL here..."
+        defaultValue={defaultValue}
         required
         className="flex-1 rounded-lg border-2 border-[#e0e0e0] px-4 py-3 text-base transition-colors outline-none focus:border-brand"
       />
