@@ -1,9 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { shortCodeExists } from "@/lib/analytics/short-code-exists";
+import { SHORT_CODE_MAX_LENGTH } from "@/lib/db/schema";
 import { isReservedKey } from "@/lib/middleware/utils/is-reserved-key";
-
-// url_mappings.short_code is varchar(255), so anything longer can't be a code.
-const MAX_SHORT_CODE_LENGTH = 255;
 
 /**
  * Answers unknown codes with a real 404 before the page renders. The analytics page
@@ -11,7 +9,7 @@ const MAX_SHORT_CODE_LENGTH = 255;
  * `shortCode` is `""` when the path segment couldn't be decoded.
  */
 export async function AnalyticsMiddleware(req: NextRequest, shortCode: string) {
-  if (!shortCode || shortCode.length > MAX_SHORT_CODE_LENGTH || isReservedKey(shortCode)) {
+  if (!shortCode || shortCode.length > SHORT_CODE_MAX_LENGTH || isReservedKey(shortCode)) {
     return notFound(req);
   }
 

@@ -1,14 +1,14 @@
 "use server";
 
-import { issueShortUrl } from "@/lib/links/issue-link";
+import { type IssueResult, issueShortUrl } from "@/lib/links/issue-link";
 
-export type IssueState =
-  | { ok: true; shortCode: string; shortUrl: string; originalUrl: string }
-  | { ok: false; message: string }
-  | null;
+type IssueFailure = Extract<IssueResult, { ok: false }>;
+
+// Same as IssueResult minus the HTTP status, which only the API route needs.
+export type IssueState = Extract<IssueResult, { ok: true }> | Omit<IssueFailure, "status"> | null;
 
 export async function issueAction(_prev: IssueState, formData: FormData): Promise<IssueState> {
   const result = await issueShortUrl(formData.get("originalUrl"));
-  if (!result.ok) return { ok: false, message: result.message };
-  return { ok: true, shortCode: result.shortCode, shortUrl: result.shortUrl, originalUrl: result.originalUrl };
+  // Rebuild the failure so `status` isn't serialized to the client.
+  return result.ok ? result : { ok: false, message: result.message };
 }
