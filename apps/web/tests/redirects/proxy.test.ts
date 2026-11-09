@@ -67,6 +67,17 @@ describe("proxy redirects", () => {
     expect(await logsOf(link.id)).toBe(0);
   });
 
+  // Counted and logged like any http(s) row (SQL can't tell), but toRedirectUrl refuses to redirect.
+  it("redirects to the not-found page when the stored URL has userinfo", async () => {
+    await insertLink("phish-code", "https://example.com", future());
+    await db.execute(
+      sql`UPDATE url_mappings SET original_url = 'https://google.com@evil.example' WHERE short_code = 'phish-code'`,
+    );
+    const response = await request("/phish-code").res;
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toBe("http://localhost:3000/not-found");
+  });
+
   it("redirects a stored URL without // the way URL parsing reads it, and counts it", async () => {
     const link = await insertLink("odd-code", "https://example.com", future());
     await db.execute(sql`UPDATE url_mappings SET original_url = 'https:example.com/x' WHERE short_code = 'odd-code'`);

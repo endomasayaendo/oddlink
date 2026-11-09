@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "@/lib/db";
+import { hasUserinfo } from "@/lib/links/url-safety";
 
 export type ResolvedLink = { id: number; originalUrl: string };
 
@@ -8,8 +9,10 @@ export type ResolvedLink = { id: number; originalUrl: string };
  * in one statement, so the count and the log can never diverge and concurrent hits
  * never lose increments.
  *
- * The scheme check matches what `new URL()` accepts as http(s) (case-insensitive,
- * `//` optional), so it agrees with `toRedirectUrl` for any value issuing can store.
+ * The SQL scheme check matches what `new URL()` accepts as http(s) (case-insensitive,
+ * `//` optional), so it agrees with `toRedirectUrl` for newly issued values. Rows from before
+ * a stricter issuing rule (e.g. URLs with userinfo) can still match here and get counted;
+ * `toRedirectUrl` is the authoritative gate and decides whether the redirect happens.
  */
 export async function resolveShortCode(shortCode: string): Promise<ResolvedLink | null> {
   const { rows } = await db.execute<{ id: string; original_url: string }>(sql`
@@ -34,5 +37,7 @@ export async function resolveShortCode(shortCode: string): Promise<ResolvedLink 
 export function toRedirectUrl(originalUrl: string): URL | null {
   if (!URL.canParse(originalUrl)) return null;
   const url = new URL(originalUrl);
-  return url.protocol === "http:" || url.protocol === "https:" ? url : null;
+  if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+  // Rows issued before userinfo was rejected must not redirect to a disguised host.
+  return hasUserinfo(url) ? null : url;
 }

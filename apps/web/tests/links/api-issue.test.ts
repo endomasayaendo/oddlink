@@ -28,6 +28,12 @@ describe("POST /api/issue", () => {
     expect(await res.json()).toEqual({ message: "Must be a valid http or https URL" });
   });
 
+  it("returns 400 when the URL has a username or password", async () => {
+    const res = await post(JSON.stringify({ originalUrl: "https://google.com@evil.example" }));
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ message: "URLs with a username or password are not allowed" });
+  });
+
   it("returns 400 when the body is empty or not JSON", async () => {
     expect((await post()).status).toBe(400);
     expect((await post("{oops")).status).toBe(400);

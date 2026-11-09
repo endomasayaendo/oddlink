@@ -102,4 +102,15 @@ describe("toRedirectUrl", () => {
   it.each(["not a url", "javascript:alert(1)", "file:///etc/passwd"])("rejects %s", (value) => {
     expect(toRedirectUrl(value)).toBeNull();
   });
+
+  it.each(["https://google.com@evil.example", "https://u:p@example.com", "HTTPS://u@example.com"])(
+    "rejects %s, which carries a username or password",
+    (value) => {
+      expect(toRedirectUrl(value)).toBeNull();
+    },
+  );
+
+  it("accepts an empty userinfo", () => {
+    expect(toRedirectUrl("https://@example.com")?.href).toBe("https://example.com/");
+  });
 });
