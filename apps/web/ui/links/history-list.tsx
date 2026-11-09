@@ -8,10 +8,6 @@ type Props = {
   onRemove: (shortCode: string) => void;
 };
 
-function truncate(url: string, max: number): string {
-  return url.length > max ? url.slice(0, max) + "…" : url;
-}
-
 const actionClass = "cursor-pointer text-xs whitespace-nowrap text-[#aaa] transition-colors hover:text-brand hover:no-underline";
 
 function HistoryItem({ entry, onRemove }: { entry: HistoryEntry; onRemove: (shortCode: string) => void }) {
@@ -30,7 +26,9 @@ function HistoryItem({ entry, onRemove }: { entry: HistoryEntry; onRemove: (shor
           >
             {entry.shortUrl}
           </a>
-          <span className="truncate text-[0.7rem] text-[#bbb]">{truncate(entry.originalUrl, 50)}</span>
+          <span className="truncate text-[0.7rem] text-[#bbb]" title={entry.originalUrl}>
+            {entry.originalUrl}
+          </span>
         </div>
         <div className="flex w-full shrink-0 items-center gap-3 sm:w-auto">
           <Link href={`/analytics/${entry.shortCode}`} className={actionClass}>
