@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { shortCodeExists } from "@/lib/analytics/short-code-exists";
-import { SHORT_CODE_MAX_LENGTH } from "@/lib/db/schema";
+import { isPossibleShortCode } from "@/lib/middleware/utils/is-possible-short-code";
 import { isReservedKey } from "@/lib/middleware/utils/is-reserved-key";
 
 /**
@@ -9,8 +9,8 @@ import { isReservedKey } from "@/lib/middleware/utils/is-reserved-key";
  * `shortCode` is `""` when the path segment couldn't be decoded.
  */
 export async function AnalyticsMiddleware(req: NextRequest, shortCode: string) {
-  // Anything longer than the short_code column can't be a code; skip the lookup.
-  if (!shortCode || shortCode.length > SHORT_CODE_MAX_LENGTH || isReservedKey(shortCode)) {
+  // Anything that can't be a code (empty, too long, control characters, `.`) skips the lookup.
+  if (!isPossibleShortCode(shortCode) || isReservedKey(shortCode)) {
     return notFound(req);
   }
 
