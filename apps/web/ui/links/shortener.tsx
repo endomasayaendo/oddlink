@@ -18,9 +18,10 @@ export function Shortener() {
   const [copyError, setCopyError] = useState("");
   const [dismissed, setDismissed] = useState<FormState>(null);
 
-  const [state, formAction, pending] = useActionState(async (prev: FormState, formData: FormData): Promise<FormState> => {
+  const [state, formAction, pending] = useActionState(async (_prev: FormState, formData: FormData): Promise<FormState> => {
     setCopyError("");
-    const next = await issueAction(prev, formData);
+    // The action ignores its previous state; pass null so the last submitted URL isn't sent back.
+    const next = await issueAction(null, formData);
     if (next?.ok) addEntry({ shortCode: next.shortCode, shortUrl: next.shortUrl, originalUrl: next.originalUrl });
     // React resets the form after every action, so a failed submit would wipe the input unless
     // the value travels in the returned state and is fed back as the input's defaultValue.
