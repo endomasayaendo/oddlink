@@ -15,6 +15,13 @@
       "when": 1792843661924,
       "tag": "0001_seed_words",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794229738866,
+      "tag": "0002_word_length_check",
+      "breakpoints": true
     }
   ]
 }

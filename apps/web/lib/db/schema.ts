@@ -1,7 +1,14 @@
-import { bigint, bigserial, boolean, index, pgTable, text, timestamp, varchar } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { bigint, bigserial, boolean, check, index, pgTable, text, timestamp, varchar } from "drizzle-orm/pg-core";
 
 /** Column length of url_mappings.short_code; issuing regenerates phrases longer than this. */
 export const SHORT_CODE_MAX_LENGTH = 255;
+
+/**
+ * Longest word allowed in the word tables. The longest pattern (C) is 5 words + "with" + 5 hyphens,
+ * so 5w + 9 <= SHORT_CODE_MAX_LENGTH gives w <= 49 and every phrase fits in short_code.
+ */
+export const WORD_MAX_LENGTH = Math.floor((SHORT_CODE_MAX_LENGTH - "with".length - 5) / 5);
 
 export const urlMappings = pgTable("url_mappings", {
   id: bigserial({ mode: "number" }).primaryKey(),
@@ -26,13 +33,17 @@ export const accessLog = pgTable(
 );
 
 const wordTable = (name: string) =>
-  pgTable(name, {
-    id: bigserial({ mode: "number" }).primaryKey(),
-    word: varchar({ length: 50 }).notNull().unique(),
-    isActive: boolean("is_active").notNull().default(true),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-  });
+  pgTable(
+    name,
+    {
+      id: bigserial({ mode: "number" }).primaryKey(),
+      word: varchar({ length: 50 }).notNull().unique(),
+      isActive: boolean("is_active").notNull().default(true),
+      createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+      updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (t) => [check(`${name}_word_length_check`, sql`char_length(${t.word}) <= ${sql.raw(String(WORD_MAX_LENGTH))}`)],
+  );
 
 export const adjectives = wordTable("adjectives");
 export const nouns = wordTable("nouns");
