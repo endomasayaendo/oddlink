@@ -150,10 +150,12 @@ CI (GitHub Actions) runs lint, typecheck, build and test on every pull request a
 
 Set in `apps/web/.env`, or in the shell (`turbo.json` passes these through to the tasks).
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `DATABASE_URL` | — | Postgres connection string |
-| `TEST_DATABASE_URL` | — | Database used by `pnpm test` |
-| `BASE_URL` | `http://localhost:3000` | Base URL used in generated short links |
-| `APP_TIME_ZONE` | `Asia/Tokyo` | Time zone for daily click counts and dates |
-| `DB_NAME` / `DB_USERNAME` / `DB_PASSWORD` | `oddlink` / `postgres` / `postgres` | Used by `apps/web/docker-compose.yml` |
+| Variable | Default | Required | Description |
+|----------|---------|----------|-------------|
+| `DATABASE_URL` | — | In production | Postgres connection string (`postgres://` or `postgresql://`) |
+| `BASE_URL` | `http://localhost:3000` | In production | Absolute `http`/`https` URL used in generated short links; no credentials, query or fragment; trailing slashes are removed |
+| `APP_TIME_ZONE` | `Asia/Tokyo` | No | IANA time zone name (e.g. `Asia/Tokyo`, `UTC`) for daily click counts and dates; offsets like `+09:00` are rejected |
+| `TEST_DATABASE_URL` | — | For `pnpm test` | Database used by the tests (not read by the app) |
+| `DB_NAME` / `DB_USERNAME` / `DB_PASSWORD` | `oddlink` / `postgres` / `postgres` | No | Used by `apps/web/docker-compose.yml` |
+
+The app validates these at startup (`apps/web/lib/env.ts`). In production (`next start`), a missing `BASE_URL` or `DATABASE_URL`, or any malformed value, prints every problem and exits. In development and tests, missing values fall back to the defaults. `next build` needs none of them.

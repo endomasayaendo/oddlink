@@ -1,5 +1,9 @@
-export const BASE_URL = (process.env.BASE_URL ?? "http://localhost:3000").replace(/\/$/, "");
+import { getEnv } from "@/lib/env";
 
-export const APP_TIME_ZONE = process.env.APP_TIME_ZONE ?? "Asia/Tokyo";
+const env = getEnv();
+
+export const BASE_URL = env.BASE_URL;
+
+export const APP_TIME_ZONE = env.APP_TIME_ZONE;
 
 export const shortUrlFor = (shortCode: string) => `${BASE_URL}/${shortCode}`;
