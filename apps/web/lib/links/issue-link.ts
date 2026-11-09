@@ -1,65 +1,39 @@
 import { sql } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { SHORT_CODE_MAX_LENGTH, urlMappings } from "@/lib/db/schema";
+import { urlMappings } from "@/lib/db/schema";
 import { shortUrlFor } from "@/lib/constants";
-import { generatePhrase } from "@oddlink/utils";
 import { originalUrlSchema } from "@/lib/zod/schemas/links";
-import { getWords } from "./get-words";
-
-const MAX_ATTEMPTS = 5;
+import { type GeneratePhrase, withFreshPhrase } from "./fresh-phrase";
 
 export type IssueResult =
-  | { ok: true; shortCode: string; shortUrl: string; originalUrl: string }
+  | { ok: true; id: number; shortCode: string; shortUrl: string; originalUrl: string }
   | { ok: false; status: 400 | 503; message: string };
 
-type Options = { generate?: () => Promise<string> };
-
-const defaultGenerate = async () => generatePhrase(await getWords());
+type Options = { generate?: GeneratePhrase };
 
 /**
  * Validates the URL and stores it under a fresh phrase, regenerating on collisions
- * and on phrases too long for the short_code column. Both share MAX_ATTEMPTS.
+ * and on phrases too long for the short_code column (see withFreshPhrase).
  */
-export async function issueShortUrl(input: unknown, { generate = defaultGenerate }: Options = {}): Promise<IssueResult> {
+export async function issueShortUrl(input: unknown, { generate }: Options = {}): Promise<IssueResult> {
   const parsed = originalUrlSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, status: 400, message: parsed.error.issues[0].message };
   }
   const originalUrl = parsed.data;
 
-  let tooLong = 0;
-  try {
-    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-      const shortCode = await generate();
-      // Would fail with 22001 (value too long). Count code points, as varchar(n) does.
-      const length = [...shortCode].length;
-      if (length > SHORT_CODE_MAX_LENGTH) {
-        tooLong++;
-        console.warn(`Generated phrase is ${length} characters (max ${SHORT_CODE_MAX_LENGTH}); check the word lists for long words`);
-        continue;
-      }
-      try {
-        await db.insert(urlMappings).values({
-          shortCode,
-          originalUrl,
-          expiresAt: sql`now() + interval '1 year'`,
-        });
-        return { ok: true, shortCode, shortUrl: shortUrlFor(shortCode), originalUrl };
-      } catch (error) {
-        if (!isUniqueViolation(error)) throw error;
-      }
-    }
-    console.warn(
-      `Failed to issue a short code after ${MAX_ATTEMPTS} attempts (${MAX_ATTEMPTS - tooLong} collisions, ${tooLong} too long)`,
-    );
-  } catch (error) {
-    console.error("Failed to issue short URL", error);
-  }
-  return { ok: false, status: 503, message: "Service temporarily unavailable" };
-}
+  const issued = await withFreshPhrase(
+    async (shortCode) => {
+      const [row] = await db
+        .insert(urlMappings)
+        .values({ shortCode, originalUrl, expiresAt: sql`now() + interval '1 year'` })
+        .returning({ id: urlMappings.id });
+      return { id: row.id, shortCode };
+    },
+    { generate, label: "issue a short code" },
+  );
+  if (!issued) return { ok: false, status: 503, message: "Service temporarily unavailable" };
 
-// Drizzle wraps driver errors, so the Postgres code may sit on `cause`.
-function isUniqueViolation(error: unknown): boolean {
-  const code = (e: unknown) => (e as { code?: string } | undefined)?.code;
-  return code(error) === "23505" || code((error as { cause?: unknown })?.cause) === "23505";
+  const { id, shortCode } = issued.value;
+  return { ok: true, id, shortCode, shortUrl: shortUrlFor(shortCode), originalUrl };
 }
