@@ -74,5 +74,16 @@ export function useHistory() {
     save(getSnapshot().filter((e) => e.shortCode !== shortCode));
   };
 
-  return { history, addEntry, removeEntry };
+  /** Swaps a rerolled link in place, keeping its position and createdAt. No-op if it was removed. */
+  const replaceEntry = (oldShortCode: string, entry: Omit<HistoryEntry, "createdAt">) => {
+    const current = getSnapshot();
+    if (!current.some((e) => e.shortCode === oldShortCode)) return;
+    save(
+      current
+        .filter((e) => e.shortCode !== entry.shortCode)
+        .map((e) => (e.shortCode === oldShortCode ? { ...entry, createdAt: e.createdAt } : e)),
+    );
+  };
+
+  return { history, addEntry, removeEntry, replaceEntry };
 }

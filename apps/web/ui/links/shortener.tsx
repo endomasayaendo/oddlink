@@ -14,12 +14,13 @@ type IssueFailure = Extract<NonNullable<IssueState>, { ok: false }>;
 type FormState = Exclude<IssueState, IssueFailure> | (IssueFailure & { submitted: string });
 
 export function Shortener() {
-  const { history, addEntry, removeEntry } = useHistory();
-  const [copyError, setCopyError] = useState("");
+  const { history, addEntry, removeEntry, replaceEntry } = useHistory();
+  // Errors from the result card (copy, reroll).
+  const [cardError, setCardError] = useState("");
   const [dismissed, setDismissed] = useState<FormState>(null);
 
   const [state, formAction, pending] = useActionState(async (_prev: FormState, formData: FormData): Promise<FormState> => {
-    setCopyError("");
+    setCardError("");
     // The action ignores its previous state; pass null so the last submitted URL isn't sent back.
     const next = await issueAction(null, formData);
     if (next?.ok) addEntry({ shortCode: next.shortCode, shortUrl: next.shortUrl, originalUrl: next.originalUrl });
@@ -32,7 +33,7 @@ export function Shortener() {
     return next;
   }, null);
 
-  const error = copyError || (state && !state.ok && state !== dismissed ? state.message : "");
+  const error = cardError || (state && !state.ok && state !== dismissed ? state.message : "");
 
   return (
     <>
@@ -42,7 +43,7 @@ export function Shortener() {
         <ErrorMessage
           message={error}
           onDismiss={() => {
-            setCopyError("");
+            setCardError("");
             setDismissed(state);
           }}
         />
@@ -50,7 +51,14 @@ export function Shortener() {
 
       {state?.ok && (
         <div className="flex justify-center">
-          <ResultCard key={state.shortCode} shortCode={state.shortCode} shortUrl={state.shortUrl} onError={setCopyError} />
+          {/* Keyed by the issued code, so a reroll (which changes the code inside the card) keeps it mounted. */}
+          <ResultCard
+            key={state.shortCode}
+            link={{ shortCode: state.shortCode, shortUrl: state.shortUrl, originalUrl: state.originalUrl }}
+            rerollToken={state.rerollToken}
+            onError={setCardError}
+            onRerolled={replaceEntry}
+          />
         </div>
       )}
 

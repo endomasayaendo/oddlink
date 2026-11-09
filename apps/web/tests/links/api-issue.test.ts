@@ -16,6 +16,13 @@ describe("POST /api/issue", () => {
     expect(json.shortUrl).toMatch(/^http:\/\/localhost:3000\/[a-z]+(-[a-z]+)+$/);
   });
 
+  it("keeps the response shape: no reroll token or row id (reroll is UI only)", async () => {
+    const res = await post(JSON.stringify({ originalUrl: "https://example.com" }));
+    const json = await res.json();
+    expect(Object.keys(json).sort()).toEqual(["originalUrl", "shortUrl"]);
+    expect(json).not.toHaveProperty("rerollToken");
+  });
+
   it("returns 400 when the URL is blank", async () => {
     const res = await post(JSON.stringify({ originalUrl: "" }));
     expect(res.status).toBe(400);
