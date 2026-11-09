@@ -60,7 +60,10 @@ export function verifyRerollToken(token: unknown, { secret = signingSecret(), no
     const [payload, signature] = parts;
 
     const given = Buffer.from(signature, "base64url");
-    if (given.length !== SIGNATURE_BYTES || !timingSafeEqual(given, hmac(secret, payload))) {
+    // Node's decoder ignores the unused low bits of the last character, so several strings decode to
+    // the same bytes. Accept only the canonical encoding, so each token has exactly one spelling.
+    const canonical = given.toString("base64url") === signature;
+    if (!canonical || given.length !== SIGNATURE_BYTES || !timingSafeEqual(given, hmac(secret, payload))) {
       return { ok: false, reason: "tampered" };
     }
 

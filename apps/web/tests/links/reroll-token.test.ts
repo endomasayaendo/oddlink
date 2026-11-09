@@ -69,6 +69,13 @@ describe("signRerollToken / verifyRerollToken", () => {
     expect(verifyRerollToken(`${payload}.${signature}AAAA`, at(T0))).toEqual({ ok: false, reason: "tampered" });
   });
 
+  it("accepts only the canonical spelling of the signature", () => {
+    // 32 bytes is 43 base64url characters; the last one carries 2 unused bits.
+    const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    const accepted = [...alphabet].filter((c) => verifyRerollToken(`${token.slice(0, -1)}${c}`, at(T0)).ok);
+    expect(accepted).toEqual([token.at(-1)]);
+  });
+
   it.each([
     ["undefined", undefined],
     ["null", null],
