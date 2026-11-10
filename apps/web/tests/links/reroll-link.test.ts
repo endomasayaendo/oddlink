@@ -191,7 +191,12 @@ describe("issueAction / rerollAction", () => {
   it("returns a reroll token with the issued link, and the token rerolls it once", async () => {
     const issued = await issueAction(null, form("https://example.com/action"));
     if (!issued?.ok) throw new Error("issue failed");
-    expect(Object.keys(issued).sort()).toEqual(["ok", "originalUrl", "rerollToken", "shortCode", "shortUrl"]);
+    expect(Object.keys(issued).sort()).toEqual(["ok", "originalUrl", "rerollExpiresAt", "rerollToken", "shortCode", "shortUrl"]);
+    // Same instant as the one signed into the token.
+    const claims = JSON.parse(Buffer.from(issued.rerollToken.split(".")[0], "base64url").toString("utf8"));
+    expect(issued.rerollExpiresAt).toBe(claims.exp);
+    expect(issued.rerollExpiresAt - Date.now()).toBeLessThanOrEqual(REROLL_WINDOW_MS);
+    expect(issued.rerollExpiresAt - Date.now()).toBeGreaterThan(REROLL_WINDOW_MS - 10_000);
 
     const rerolled = await rerollAction(issued.rerollToken);
     if (!rerolled.ok) throw new Error("reroll failed");

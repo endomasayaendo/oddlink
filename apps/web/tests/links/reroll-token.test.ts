@@ -1,6 +1,6 @@
 import { createHmac } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { REROLL_WINDOW_MS, signRerollToken, verifyRerollToken } from "@/lib/links/reroll-token";
+import { issueRerollToken, REROLL_WINDOW_MS, signRerollToken, verifyRerollToken } from "@/lib/links/reroll-token";
 
 const secret = "test-signing-secret-0123456789abcdef";
 const T0 = Date.UTC(2026, 10, 10, 12, 0, 0);
@@ -16,12 +16,25 @@ const signRaw = (rawPayload: string) =>
   `${rawPayload}.${createHmac("sha256", secret).update(rawPayload).digest("base64url")}`;
 
 describe("signRerollToken / verifyRerollToken", () => {
-  it("round-trips the claims with a 5-minute expiry", () => {
+  it("round-trips the claims with a 1-minute expiry", () => {
     expect(decode(payload)).toEqual({ id: 42, code: "silent-cat-dances", exp: T0 + REROLL_WINDOW_MS });
     expect(verifyRerollToken(token, at(T0 + 1000))).toEqual({
       ok: true,
-      claims: { id: 42, code: "silent-cat-dances", exp: T0 + 5 * 60 * 1000 },
+      claims: { id: 42, code: "silent-cat-dances", exp: T0 + 60 * 1000 },
     });
+  });
+
+  it("has a one-minute window", () => {
+    expect(REROLL_WINDOW_MS).toBe(60_000);
+    expect(verifyRerollToken(token, at(T0 + 59_999)).ok).toBe(true);
+    expect(verifyRerollToken(token, at(T0 + 60_000))).toEqual({ ok: false, reason: "expired" });
+  });
+
+  it("issueRerollToken returns the signed expiry along with the token", () => {
+    const issued = issueRerollToken({ id: 42, code: "silent-cat-dances" }, at(T0));
+    expect(issued.expiresAt).toBe(T0 + 60_000);
+    expect(issued.token).toBe(token);
+    expect(decode(issued.token.split(".")[0]).exp).toBe(issued.expiresAt);
   });
 
   it("is valid until just before the expiry and expired from it on", () => {

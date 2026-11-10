@@ -56,6 +56,7 @@ export function Shortener() {
             key={state.shortCode}
             link={{ shortCode: state.shortCode, shortUrl: state.shortUrl, originalUrl: state.originalUrl }}
             rerollToken={state.rerollToken}
+            rerollExpiresAt={state.rerollExpiresAt}
             onError={setCardError}
             onRerolled={replaceEntry}
           />

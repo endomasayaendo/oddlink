@@ -4,7 +4,7 @@ import { getEnv } from "@/lib/env";
 // Server-only: signs with LINK_SIGNING_SECRET.
 
 /** How long after issuing a link its phrase can be rerolled. */
-export const REROLL_WINDOW_MS = 5 * 60 * 1000;
+export const REROLL_WINDOW_MS = 60 * 1000;
 
 export type RerollClaims = {
   /** url_mappings.id */
@@ -38,14 +38,22 @@ function signingSecret(): string {
 
 const hmac = (secret: string, payload: string) => createHmac("sha256", secret).update(payload).digest();
 
-/** Returns `payload.signature`, both base64url, valid for REROLL_WINDOW_MS from now. */
-export function signRerollToken(
+/**
+ * Returns the token (`payload.signature`, both base64url) valid for REROLL_WINDOW_MS from now, and
+ * that same expiry in epoch milliseconds, so what the UI shows can't differ from what is signed.
+ */
+export function issueRerollToken(
   { id, code }: Pick<RerollClaims, "id" | "code">,
   { secret = signingSecret(), now = Date.now }: Options = {},
-): string {
+): { token: string; expiresAt: number } {
   const claims: RerollClaims = { id, code, exp: now() + REROLL_WINDOW_MS };
   const payload = Buffer.from(JSON.stringify(claims)).toString("base64url");
-  return `${payload}.${hmac(secret, payload).toString("base64url")}`;
+  return { token: `${payload}.${hmac(secret, payload).toString("base64url")}`, expiresAt: claims.exp };
+}
+
+/** Just the token; see issueRerollToken. */
+export function signRerollToken(claims: Pick<RerollClaims, "id" | "code">, options: Options = {}): string {
+  return issueRerollToken(claims, options).token;
 }
 
 /**

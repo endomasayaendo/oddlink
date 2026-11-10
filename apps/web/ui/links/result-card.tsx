@@ -1,4 +1,4 @@
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { useCopy } from "@oddlink/ui";
 import { rerollAction } from "@/lib/actions/reroll-link";
@@ -9,6 +9,8 @@ type Props = {
   link: IssuedLink;
   /** Present right after issuing; lets the user reroll the phrase once. */
   rerollToken?: string;
+  /** When the token expires, in epoch milliseconds. The button goes away then (the server decides regardless). */
+  rerollExpiresAt?: number;
   /** Shows a message in the page's error area; "" clears it. */
   onError: (message: string) => void;
   onRerolled: (previousShortCode: string, link: IssuedLink) => void;
@@ -17,12 +19,20 @@ type Props = {
 const outlineButton =
   "flex-1 rounded-md border-2 border-brand bg-white px-3.5 py-1.5 text-center text-[0.8rem] font-semibold text-brand transition hover:bg-brand hover:text-white hover:no-underline sm:flex-none";
 
-export function ResultCard({ link: issued, rerollToken, onError, onRerolled }: Props) {
+export function ResultCard({ link: issued, rerollToken, rerollExpiresAt, onError, onRerolled }: Props) {
   const { copied, copy } = useCopy(onError);
   const [link, setLink] = useState(issued);
-  const [token, setToken] = useState(rerollToken);
+  // The card only mounts after an action, never during SSR, so reading the clock here is safe.
+  const [token, setToken] = useState(() => (rerollExpiresAt === undefined || rerollExpiresAt > Date.now() ? rerollToken : undefined));
   const [rerolled, setRerolled] = useState(false);
   const [rerolling, startReroll] = useTransition();
+
+  // Drop the token (and with it the button) when the window closes.
+  useEffect(() => {
+    if (!token || rerollExpiresAt === undefined) return;
+    const timer = setTimeout(() => setToken(undefined), Math.max(0, rerollExpiresAt - Date.now()));
+    return () => clearTimeout(timer);
+  }, [token, rerollExpiresAt]);
 
   const reroll = (currentToken: string) => {
     onError("");
@@ -79,7 +89,7 @@ export function ResultCard({ link: issued, rerollToken, onError, onRerolled }: P
         </div>
         {token && (
           <p id="reroll-note" className="text-left text-xs text-[#999]">
-            Not your phrase? Reroll once within 5 minutes. The current link will stop working.
+            Not your phrase? Reroll once within 1 minute. The current link will stop working.
           </p>
         )}
         {rerolled && (

@@ -1,7 +1,7 @@
 "use server";
 
 import { type IssueResult, issueShortUrl } from "@/lib/links/issue-link";
-import { signRerollToken } from "@/lib/links/reroll-token";
+import { issueRerollToken } from "@/lib/links/reroll-token";
 
 type IssueFailure = Extract<IssueResult, { ok: false }>;
 
@@ -12,6 +12,8 @@ export type IssueSuccess = {
   originalUrl: string;
   /** Lets this page reroll the phrase once (see rerollAction). Client state only; never stored. */
   rerollToken: string;
+  /** When the token stops working, in epoch milliseconds. The UI hides the button then; the server still decides. */
+  rerollExpiresAt: number;
 };
 
 // The HTTP status only matters to the API route, and the row id stays inside the token.
@@ -21,5 +23,6 @@ export async function issueAction(_prev: IssueState, formData: FormData): Promis
   const result = await issueShortUrl(formData.get("originalUrl"));
   if (!result.ok) return { ok: false, message: result.message };
   const { id, shortCode, shortUrl, originalUrl } = result;
-  return { ok: true, shortCode, shortUrl, originalUrl, rerollToken: signRerollToken({ id, code: shortCode }) };
+  const { token: rerollToken, expiresAt: rerollExpiresAt } = issueRerollToken({ id, code: shortCode });
+  return { ok: true, shortCode, shortUrl, originalUrl, rerollToken, rerollExpiresAt };
 }

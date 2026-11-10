@@ -61,7 +61,7 @@ pnpm dev                                 # http://localhost:3000
 
 | Route | What it does |
 |---|---|
-| `/` | Shorten a URL (Server Action) and see your recent links (stored in `localStorage`). Right after shortening, the phrase can be rerolled once within 5 minutes; the link keeps its clicks, and the previous phrase stops working (UI only, no API) |
+| `/` | Shorten a URL (Server Action) and see your recent links (stored in `localStorage`). Right after shortening, the phrase can be rerolled once within 1 minute; the link keeps its clicks, and the previous phrase stops working (UI only, no API) |
 | `POST /api/issue` | Shorten a URL from anywhere else (see below) |
 | `GET /{shortCode}` | Handled in `proxy.ts`: counts and logs the access in one SQL statement, then `302`s to the original URL (`503` if that write fails). Unknown or expired codes get a real `404` |
 | `/analytics/{shortCode}` | Total clicks, created / expires dates, and daily clicks. `proxy.ts` checks the code first so unknown codes get a real `404` |
@@ -155,7 +155,7 @@ Set in `apps/web/.env`, or in the shell (`turbo.json` passes these through to th
 | `DATABASE_URL` | — | In production | Postgres connection string (`postgres://` or `postgresql://`) |
 | `BASE_URL` | `http://localhost:3000` | In production | Absolute `http`/`https` URL used in generated short links; no credentials, query or fragment; trailing slashes are removed |
 | `APP_TIME_ZONE` | `Asia/Tokyo` | No | IANA time zone name (e.g. `Asia/Tokyo`, `UTC`) for daily click counts and dates; offsets like `+09:00` are rejected |
-| `LINK_SIGNING_SECRET` | built-in dev key | In production | HMAC key for reroll tokens, at least 32 characters. Generate one with `openssl rand -base64 32`. Rotating it only invalidates rerolls still pending (they last 5 minutes) |
+| `LINK_SIGNING_SECRET` | built-in dev key | In production | HMAC key for reroll tokens, at least 32 characters. Generate one with `openssl rand -base64 32`. Rotating it only invalidates rerolls still pending (they last 1 minute) |
 | `TEST_DATABASE_URL` | — | For `pnpm test` | Database used by the tests (not read by the app) |
 | `DB_NAME` / `DB_USERNAME` / `DB_PASSWORD` | `oddlink` / `postgres` / `postgres` | No | Used by `apps/web/docker-compose.yml` |
 
