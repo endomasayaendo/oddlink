@@ -90,7 +90,7 @@ export const urlMappings = pgTable(
 
 ### Phase 2 (with ADR 0003)
 
-One additive migration: `owner_id` as a **nullable** foreign key to the users table that ADR 0003 introduces, plus a partial index on `owner_id WHERE owner_id IS NOT NULL` for the "my links" list. `NULL` means anonymous, which covers every existing row. A check `owner_id IS NOT NULL OR (disabled_by IS DISTINCT FROM 'owner' AND deleted_by IS DISTINCT FROM 'owner')` keeps the `owner` actor from appearing on an anonymous link.
+One additive migration: `owner_id` as a **nullable** foreign key to the users table that ADR 0003 introduces, plus a partial index on `owner_id WHERE owner_id IS NOT NULL` for the "my links" list. `NULL` means anonymous, which covers every existing row. A check `owner_id IS NOT NULL OR disabled_by IS DISTINCT FROM 'owner'` keeps an anonymous link from being stuck in an owner disable that nobody can undo. A tombstone with `deleted_by = 'owner'` and no owner stays valid, because ADR 0003 tombstones a user's links and then clears `owner_id` when the account is deleted.
 
 **Recommendation: add `owner_id` in Phase 2, not now.** A foreign key needs its target table, and the users table's shape depends on the auth library that ADR 0003 chooses. A bare nullable column without the FK would be dead weight and would invite writes that nothing validates. Adding a nullable column is a cheap metadata-only change in Postgres, so waiting costs nothing. What Phase 1 does to stay compatible: the `owner` actor value already exists, and `link-control.ts` takes the acting principal as a parameter (`{ actor: "operator" } | { actor: "owner", userId }`), so Phase 2 adds a branch instead of changing signatures.
 
