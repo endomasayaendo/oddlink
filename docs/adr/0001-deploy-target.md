@@ -1,6 +1,6 @@
 # 0001. Deploy target (hosting and Postgres)
 
-- Status: Proposed (the owner decides; this document goes only as far as a recommendation)
+- Status: Accepted (2026-11-11, by the owner)
 - Date: 2026-11-10
 - Related: #28 (Pool settings), #29 (env var validation at startup), #33 (rate limiting, needs-decision), #35 (data retention)
 

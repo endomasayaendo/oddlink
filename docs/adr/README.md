@@ -43,5 +43,5 @@ The goal is to make it possible to trace later not only "what was chosen" but al
 
 | # | Title | Status |
 |---|---|---|
-| [0001](0001-deploy-target.md) | Deploy target (hosting and Postgres) | Proposed |
+| [0001](0001-deploy-target.md) | Deploy target (hosting and Postgres) | Accepted |
 | [0002](0002-link-lifecycle-and-control.md) | Link lifecycle and control (disable, delete, who may do it) | Proposed |
