@@ -4,7 +4,7 @@ import { NextRequest } from "next/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { db } from "@/lib/db";
 import { accessLog, urlMappings } from "@/lib/db/schema";
-import { NOT_FOUND_CACHE_CONTROL } from "@/lib/middleware/utils/rewrite-not-found";
+import { NO_STORE_CACHE_CONTROL, NOT_FOUND_CACHE_CONTROL } from "@/lib/middleware/utils/rewrite-not-found";
 import { config, proxy } from "@/proxy";
 import { resetUrlTables } from "../utils/reset-db";
 
@@ -192,6 +192,157 @@ describe("proxy analytics check", () => {
   });
 });
 
+describe("proxy preview", () => {
+  const expectPreview = (res: Response, code: string) => {
+    expect(rewriteOf(res)).toBe(`http://localhost:3000/preview/${encodeURIComponent(code)}`);
+    expect(res.headers.get("location")).toBeNull();
+    expect(res.headers.get("cache-control")).toBe(NO_STORE_CACHE_CONTROL);
+    expect(res.headers.get("x-robots-tag")).toBe("noindex, nofollow");
+  };
+
+  it("rewrites /code+ to the preview page without redirecting or counting", async () => {
+    const link = await insertLink("go-code", "https://example.com/target", future());
+    expectPreview(await request("/go-code+").res, "go-code");
+    expect(await countOf("go-code")).toBe(0);
+    expect(await logsOf(link.id)).toBe(0);
+  });
+
+  it("previews on HEAD too, without counting", async () => {
+    await insertLink("go-code", "https://example.com", future());
+    expectPreview(await request("/go-code+", "HEAD").res, "go-code");
+    expect(await countOf("go-code")).toBe(0);
+  });
+
+  it.each(["%2B", "%2b"])("treats an encoded plus (%s) like a literal one", async (plus) => {
+    await insertLink("go-code", "https://example.com", future());
+    expectPreview(await request(`/go-code${plus}`).res, "go-code");
+    expect(await countOf("go-code")).toBe(0);
+  });
+
+  it("encodes a non-ASCII code in the rewrite target", async () => {
+    await insertLink("café-😀-code", "https://example.com", future());
+    const res = await request(`/${encodeURIComponent("café-😀-code")}+`).res;
+    expectPreview(res, "café-😀-code");
+    expect(rewriteOf(res)).toBe("http://localhost:3000/preview/caf%C3%A9-%F0%9F%98%80-code");
+  });
+
+  it("previews an expired link without counting it", async () => {
+    const link = await insertLink("old-code", "https://example.com", past());
+    expectPreview(await request("/old-code+").res, "old-code");
+    expect(await countOf("old-code")).toBe(0);
+    expect(await logsOf(link.id)).toBe(0);
+  });
+
+  it("serves the 404 page for an unknown code", async () => {
+    expectNotFound(await request("/missing-code+").res);
+  });
+
+  it("serves the 404 page when the stored URL is unusable", async () => {
+    await insertLink("bad-code", "https://example.com", future());
+    await db.execute(sql`UPDATE url_mappings SET original_url = 'javascript:alert(1)' WHERE short_code = 'bad-code'`);
+    expectNotFound(await request("/bad-code+").res);
+  });
+
+  it("serves the 404 page when the stored URL has userinfo", async () => {
+    await insertLink("phish-code", "https://example.com", future());
+    await db.execute(
+      sql`UPDATE url_mappings SET original_url = 'https://google.com@evil.example' WHERE short_code = 'phish-code'`,
+    );
+    expectNotFound(await request("/phish-code+").res);
+    expect(await countOf("phish-code")).toBe(0);
+  });
+
+  it.each([
+    ["a bare plus", "/+"],
+    ["two pluses", "/++"],
+    ["a doubled suffix", "/code++"],
+    ["an encoded doubled suffix", "/code%2B%2B"],
+    ["a NUL", "/%00+"],
+    ["a dotted key", "/a.b+"],
+    ["a 256-character key", `/${"a".repeat(256)}+`],
+  ])("serves the 404 page for %s without touching the database", async (_, path) => {
+    const execute = vi.spyOn(db, "execute");
+    expectNotFound(await request(path).res);
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it.each(["/not-found+", "/favicon.ico+"])("serves the 404 page for %s instead of passing it on", async (path) => {
+    expectNotFound(await request(path).res);
+  });
+
+  it("serves the 404 page for a doubled suffix on an existing code", async () => {
+    await insertLink("plain", "https://example.com", future());
+    expectNotFound(await request("/plain++").res);
+  });
+
+  it("answers 503 and does not cache it when the lookup fails", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(db, "select").mockImplementationOnce(() => {
+      throw new Error("connection lost");
+    });
+    const res = await request("/some-code+").res;
+    expect(res.status).toBe(503);
+    expect(res.headers.get("cache-control")).toBe(NO_STORE_CACHE_CONTROL);
+  });
+
+  it.each(["POST", "PUT", "DELETE", "PATCH"])("answers %s with 405 without a lookup", async (method) => {
+    const execute = vi.spyOn(db, "execute");
+    await insertLink("go-code", "https://example.com", future());
+    expect((await request("/go-code+", method).res).status).toBe(405);
+    expect(execute).not.toHaveBeenCalled();
+    expect(await countOf("go-code")).toBe(0);
+  });
+
+  it("answers OPTIONS with the allowed methods", async () => {
+    const response = await request("/go-code+", "OPTIONS").res;
+    expect(response.status).toBe(204);
+    expect(response.headers.get("allow")).toBe("GET, HEAD, OPTIONS");
+  });
+
+  it("still redirects and counts /code", async () => {
+    const link = await insertLink("go-code", "https://example.com/target", future());
+    const response = await request("/go-code").res;
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toBe("https://example.com/target");
+    expect(await countOf("go-code")).toBe(1);
+    expect(await logsOf(link.id)).toBe(1);
+  });
+
+  it("does not take /analytics/code+ for a code", async () => {
+    await insertLink("go-code", "https://example.com", future());
+    expectNotFound(await request("/analytics/go-code+").res, "http://localhost:3000/analytics/not-found");
+  });
+
+  describe("direct /preview/{shortCode}", () => {
+    it("passes an existing code through with the no-store and noindex headers", async () => {
+      await insertLink("go-code", "https://example.com", future());
+      const res = await request("/preview/go-code").res;
+      expect(passesThrough(res)).toBe(true);
+      expect(res.headers.get("cache-control")).toBe(NO_STORE_CACHE_CONTROL);
+      expect(res.headers.get("x-robots-tag")).toBe("noindex, nofollow");
+      expect(await countOf("go-code")).toBe(0);
+    });
+
+    it("passes an expired code through", async () => {
+      await insertLink("old-code", "https://example.com", past());
+      expect(passesThrough(await request("/preview/old-code").res)).toBe(true);
+    });
+
+    it.each(["/preview/missing-code", "/preview/a.b", "/preview/code+", "/preview/%E0%A4%A", "/preview/not-found"])(
+      "serves the 404 page for %s",
+      async (path) => {
+        expectNotFound(await request(path).res);
+      },
+    );
+
+    it("serves the 404 page when the stored URL is unusable", async () => {
+      await insertLink("bad-code", "https://example.com", future());
+      await db.execute(sql`UPDATE url_mappings SET original_url = 'javascript:alert(1)' WHERE short_code = 'bad-code'`);
+      expectNotFound(await request("/preview/bad-code").res);
+    });
+  });
+});
+
 describe("proxy pass-through", () => {
   it.each(["/", "/not-found", "/favicon.ico", "/a/b"])(
     "lets %s reach the app",
@@ -202,16 +353,16 @@ describe("proxy pass-through", () => {
 });
 
 describe("proxy matcher", () => {
-  it.each(["/some-code", "/not-found", "/favicon.ico", "/robots.txt", "/_next", "/analytics/some-code"])("runs on %s", (url) => {
+  it.each(["/some-code", "/not-found", "/favicon.ico", "/robots.txt", "/_next", "/analytics/some-code", "/preview/some-code", "/some-code+"])("runs on %s", (url) => {
     expect(unstable_doesMiddlewareMatch({ config, url })).toBe(true);
   });
 
-  it.each(["/", "/analytics/a/b", "/api/issue", "/_next/static/chunk.js", "/a/b"])("skips %s", (url) => {
+  it.each(["/", "/analytics/a/b", "/preview/a/b", "/api/issue", "/_next/static/chunk.js", "/a/b"])("skips %s", (url) => {
     expect(unstable_doesMiddlewareMatch({ config, url })).toBe(false);
   });
 
-  it("skips the analytics check for prefetches", () => {
+  it.each(["/analytics/some-code", "/preview/some-code"])("skips the %s check for prefetches", (url) => {
     const headers = { "next-router-prefetch": "1" };
-    expect(unstable_doesMiddlewareMatch({ config, url: "/analytics/some-code", headers })).toBe(false);
+    expect(unstable_doesMiddlewareMatch({ config, url, headers })).toBe(false);
   });
 });

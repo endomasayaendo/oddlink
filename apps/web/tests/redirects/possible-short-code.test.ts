@@ -24,6 +24,9 @@ describe("isPossibleShortCode", () => {
     ["a control character inside a word", "gol\0den"],
     ["a dot", "a.b"],
     ["a file name", "robots.txt"],
+    ["a plus", "+"],
+    ["a trailing plus", "code+"],
+    ["a plus inside a word", "co+de"],
   ])("rejects %s", (_, key) => {
     expect(isPossibleShortCode(key)).toBe(false);
   });
