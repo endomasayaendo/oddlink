@@ -44,3 +44,4 @@ The goal is to make it possible to trace later not only "what was chosen" but al
 | # | Title | Status |
 |---|---|---|
 | [0001](0001-deploy-target.md) | Deploy target (hosting and Postgres) | Accepted |
+| [0003](0003-optional-accounts.md) | Optional accounts and link ownership | Proposed |
