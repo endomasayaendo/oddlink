@@ -1,5 +1,9 @@
+import type { ReactNode } from "react";
+
 type Props = {
   message: string;
+  /** Optional extra content (links, attribution) shown under the message. */
+  children?: ReactNode;
   onDismiss: () => void;
   /**
    * Extra classes for the root, typically outer spacing. Defaults to `mb-6`;
@@ -8,13 +12,16 @@ type Props = {
   className?: string;
 };
 
-export function ErrorMessage({ message, onDismiss, className = "mb-6" }: Props) {
+export function ErrorMessage({ message, children, onDismiss, className = "mb-6" }: Props) {
   return (
     <div
       role="alert"
       className={`flex animate-fade-in-down items-center gap-3 rounded-lg border border-[#feb2b2] bg-[#fff5f5] px-4 py-3.5 ${className}`}
     >
-      <span className="flex-1 text-left text-[0.9rem] text-[#c53030]">{message}</span>
+      <div className="flex-1 text-left text-[0.9rem] text-[#c53030]">
+        <span>{message}</span>
+        {children}
+      </div>
       <button
         type="button"
         onClick={onDismiss}
