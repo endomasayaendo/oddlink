@@ -24,7 +24,9 @@ export function expressionsFor({ host, path, query, isIp }: CanonicalUrl): strin
 }
 
 function hostSuffixes(host: string): string[] {
-  const domain = getDomain(host, { allowPrivateDomains: false });
+  // validateHostname: false — the URL parser accepts labels tldts calls invalid (`-x.evil.com`),
+  // and those must still be checked under their registrable domain.
+  const domain = getDomain(host, { allowPrivateDomains: false, validateHostname: false });
   // Single-label hosts and bare public suffixes (`co.uk`) have no registrable domain.
   if (!domain) return [];
   const labels = host.split(".");

@@ -143,24 +143,31 @@ export function createSafeBrowsingClient({
       else missing.add(prefix);
     }
 
-    if (missing.size > 0) {
+    // A cached match is enough: don't let a failing lookup for the other prefixes hide it.
+    const cachedThreats = enforceableThreats(hashes, known);
+    if (cachedThreats.size === 0 && missing.size > 0) {
       const fetched = await search([...missing]);
       if (!fetched) return "unknown";
       for (const [h, details] of fetched) known.set(h, details);
     }
 
-    const threatTypes = new Set<string>();
-    for (const hash of hashes) {
-      for (const detail of known.get(hash.toString("base64")) ?? []) {
-        if (isEnforceable(detail)) threatTypes.add(detail.threatType);
-      }
-    }
+    const threatTypes = cachedThreats.size > 0 ? cachedThreats : enforceableThreats(hashes, known);
     if (threatTypes.size === 0) return "safe";
     console.warn("safe_browsing outcome=flagged", { host: canonical.host, threatTypes: [...threatTypes] });
     return "unsafe";
   }
 
   return { check };
+}
+
+function enforceableThreats(hashes: Buffer[], known: Map<string, Detail[]>): Set<string> {
+  const threatTypes = new Set<string>();
+  for (const hash of hashes) {
+    for (const detail of known.get(hash.toString("base64")) ?? []) {
+      if (isEnforceable(detail)) threatTypes.add(detail.threatType);
+    }
+  }
+  return threatTypes;
 }
 
 /**

@@ -194,6 +194,15 @@ describe("cache", () => {
     expect(second).toEqual([hashPrefix(fullHash("example.com/b/"))]);
   });
 
+  it("returns a cached match without asking again, even if a lookup would fail", async () => {
+    let calls = 0;
+    const { client, fetch } = setup(() => (calls++ === 0 ? matchResponse([flagged()], "60s") : jsonResponse({}, 503)));
+    expect(await client.check(URL_TO_CHECK)).toBe("unsafe");
+    // Shares the flagged phish.example.com/login/ expression, plus prefixes that are not cached.
+    expect(await client.check("https://phish.example.com/login/other-page")).toBe("unsafe");
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
   it("caps cacheDuration at 30 minutes", async () => {
     const { client, fetch } = setup(() => jsonResponse({ cacheDuration: "86400s" }));
     await client.check(URL_TO_CHECK);

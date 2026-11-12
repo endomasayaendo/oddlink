@@ -49,6 +49,11 @@ describe("expressionsFor", () => {
     expect(expressions("https://x.foo.github.io/")).toEqual(["x.foo.github.io/", "foo.github.io/", "github.io/"]);
   });
 
+  it("adds variants for hosts the URL parser accepts but tldts would call invalid", () => {
+    expect(expressions("http://-x.evil.com/")).toEqual(["-x.evil.com/", "evil.com/"]);
+    expect(expressions("http://a_b.evil.com/")).toEqual(["a_b.evil.com/", "evil.com/"]);
+  });
+
   it("adds no variants for a single-label host or an IPv6 literal", () => {
     expect(expressions("http://localhost/a/b")).toEqual(["localhost/a/b", "localhost/", "localhost/a/"]);
     expect(expressions("http://[2001:db8::1]/")).toEqual(["[2001:db8::1]/"]);
