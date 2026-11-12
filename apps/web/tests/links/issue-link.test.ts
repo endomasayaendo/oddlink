@@ -127,4 +127,37 @@ describe("issueShortUrl", () => {
     expect(result).toMatchObject({ ok: false, status: 400 });
     expect(await db.$count(urlMappings)).toBe(0);
   });
+
+  it("refuses a URL Safe Browsing flags, without generating or inserting", async () => {
+    const generate = vi.fn(async () => "never-used");
+    const checkUrl = vi.fn(async () => "unsafe" as const);
+    const result = await issueShortUrl(" https://phish.example/login ", { generate, checkUrl });
+    expect(result).toEqual({
+      ok: false,
+      status: 422,
+      reason: "unsafe_url",
+      message: "This URL may be unsafe (suspected phishing or malware), so it can't be shortened.",
+    });
+    expect(checkUrl).toHaveBeenCalledWith("https://phish.example/login");
+    expect(generate).not.toHaveBeenCalled();
+    expect(await db.$count(urlMappings)).toBe(0);
+  });
+
+  it.each(["unknown", "safe"] as const)("issues the link when the check says %s (fail open)", async (verdict) => {
+    const result = await issueShortUrl("https://example.com/open", { checkUrl: async () => verdict });
+    expect(result).toMatchObject({ ok: true, originalUrl: "https://example.com/open" });
+  });
+
+  it("fails open when the check itself throws", async () => {
+    const result = await issueShortUrl("https://example.com", {
+      checkUrl: () => Promise.reject(new Error("boom")),
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("does not check URLs the schema rejects", async () => {
+    const checkUrl = vi.fn(async () => "safe" as const);
+    expect(await issueShortUrl("javascript:alert(1)", { checkUrl })).toMatchObject({ ok: false, status: 400 });
+    expect(checkUrl).not.toHaveBeenCalled();
+  });
 });
