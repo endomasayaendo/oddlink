@@ -43,9 +43,23 @@ describe("checkEnvAtStartup", () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("BASE_URL", "https://oddl.ink");
     vi.stubEnv("DATABASE_URL", "postgres://u:p@h/db");
+    vi.stubEnv("SAFE_BROWSING_API_KEY", "test-key");
     const exit = vi.spyOn(process, "exit").mockImplementation((() => undefined) as never);
 
     (await load())();
     expect(exit).not.toHaveBeenCalled();
+  });
+
+  it("exits 1 in production when SAFE_BROWSING_API_KEY is missing", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("BASE_URL", "https://oddl.ink");
+    vi.stubEnv("DATABASE_URL", "postgres://u:p@h/db");
+    vi.stubEnv("SAFE_BROWSING_API_KEY", "");
+    const exit = vi.spyOn(process, "exit").mockImplementation((() => undefined) as never);
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    (await load())();
+    expect(exit).toHaveBeenCalledWith(1);
+    expect(log.mock.calls.flat().join("\n")).toContain("- SAFE_BROWSING_API_KEY:");
   });
 });

@@ -3,7 +3,8 @@ import { parseEnv, resolveMode } from "@/lib/env";
 
 const PASSWORD = "s3cr3t-pa55";
 const validDb = `postgres://app:${PASSWORD}@db.example.com:5432/oddlink`;
-const runtimeEnv = { BASE_URL: "https://oddl.ink", DATABASE_URL: validDb };
+const SB_KEY = "AIzaSyTestSafeBrowsingKey-123";
+const runtimeEnv = { BASE_URL: "https://oddl.ink", DATABASE_URL: validDb, SAFE_BROWSING_API_KEY: SB_KEY };
 
 function messageOf(fn: () => unknown): string {
   try {
@@ -41,20 +42,34 @@ describe("required values", () => {
       BASE_URL: "https://oddl.ink",
       DATABASE_URL: validDb,
       APP_TIME_ZONE: "Asia/Tokyo",
+      SAFE_BROWSING_API_KEY: SB_KEY,
     });
   });
 
-  it("requires BASE_URL and DATABASE_URL at runtime and lists both", () => {
+  it("requires BASE_URL, DATABASE_URL and SAFE_BROWSING_API_KEY at runtime and lists all three", () => {
     const message = messageOf(() => parseEnv({}, "runtime"));
     expect(message).toMatch(/^Invalid environment variables:/);
     expect(message).toContain("- BASE_URL:");
     expect(message).toContain("- DATABASE_URL:");
+    expect(message).toContain("- SAFE_BROWSING_API_KEY: is required in production (SAFE_BROWSING_API_KEY is not set)");
   });
 
   it("lists only the missing variable", () => {
-    const message = messageOf(() => parseEnv({ DATABASE_URL: validDb }, "runtime"));
+    const message = messageOf(() => parseEnv({ DATABASE_URL: validDb, SAFE_BROWSING_API_KEY: SB_KEY }, "runtime"));
     expect(message).toContain("- BASE_URL:");
     expect(message).not.toContain("- DATABASE_URL:");
+    expect(message).not.toContain("- SAFE_BROWSING_API_KEY:");
+  });
+
+  it("makes SAFE_BROWSING_API_KEY optional in build and lenient modes", () => {
+    for (const mode of ["build", "lenient"] as const) {
+      expect(parseEnv({}, mode).SAFE_BROWSING_API_KEY).toBeUndefined();
+      expect(parseEnv({ SAFE_BROWSING_API_KEY: "" }, mode).SAFE_BROWSING_API_KEY).toBeUndefined();
+      expect(parseEnv({ SAFE_BROWSING_API_KEY: SB_KEY }, mode).SAFE_BROWSING_API_KEY).toBe(SB_KEY);
+    }
+    expect(() => parseEnv({ ...runtimeEnv, SAFE_BROWSING_API_KEY: "" }, "runtime")).toThrow(
+      "- SAFE_BROWSING_API_KEY:",
+    );
   });
 
   it("treats empty strings as missing", () => {
@@ -65,6 +80,7 @@ describe("required values", () => {
       BASE_URL: "http://localhost:3000",
       DATABASE_URL: undefined,
       APP_TIME_ZONE: "Asia/Tokyo",
+      SAFE_BROWSING_API_KEY: undefined,
     });
   });
 
@@ -74,6 +90,7 @@ describe("required values", () => {
         BASE_URL: "http://localhost:3000",
         DATABASE_URL: undefined,
         APP_TIME_ZONE: "Asia/Tokyo",
+        SAFE_BROWSING_API_KEY: undefined,
       });
     }
   });
@@ -162,5 +179,16 @@ describe("secret redaction", () => {
   it("does not leak a valid DATABASE_URL when another variable is invalid", () => {
     const message = messageOf(() => parseEnv({ ...runtimeEnv, BASE_URL: "ftp://x" }, "runtime"));
     expect(message).not.toContain(PASSWORD);
+  });
+
+  it("never echoes SAFE_BROWSING_API_KEY, valid or malformed", () => {
+    for (const mode of ["build", "runtime", "lenient"] as const) {
+      const bad = `${SB_KEY} with spaces`;
+      const message = messageOf(() => parseEnv({ ...runtimeEnv, SAFE_BROWSING_API_KEY: bad }, mode));
+      expect(message).toContain("- SAFE_BROWSING_API_KEY:");
+      expect(message).not.toContain(SB_KEY);
+    }
+    const message = messageOf(() => parseEnv({ ...runtimeEnv, BASE_URL: "ftp://x" }, "runtime"));
+    expect(message).not.toContain(SB_KEY);
   });
 });
