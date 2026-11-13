@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { CAPTURED } from "./protobuf-fixtures";
 
 // checkUrlSafety memoizes the env and its client per module instance, so reload it per case.
 async function load() {
@@ -29,7 +30,7 @@ describe("checkUrlSafety", () => {
 
   it("uses the configured key and an oddlink User-Agent", async () => {
     vi.stubEnv("SAFE_BROWSING_API_KEY", "configured-key");
-    const fetch = vi.fn(async () => Response.json({}));
+    const fetch = vi.fn(async () => new Response(new Uint8Array(CAPTURED.noMatch)));
     vi.stubGlobal("fetch", fetch);
 
     const check = await load();

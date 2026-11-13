@@ -1,6 +1,6 @@
-import { z } from "zod";
 import { canonicalize } from "./canonicalize";
 import { expressionsFor, fullHash, hashPrefix } from "./expressions";
+import { decodeSearchHashesResponse, type FullHashDetail } from "./protobuf";
 
 export type SafetyVerdict = "safe" | "unsafe" | "unknown";
 
@@ -25,22 +25,7 @@ export type ClientOptions = {
   maxCacheEntries?: number;
 };
 
-// Lenient on purpose: unknown fields and enum values must not fail the whole response.
-const responseSchema = z.object({
-  fullHashes: z
-    .array(
-      z.object({
-        fullHash: z.string(),
-        fullHashDetails: z
-          .array(z.object({ threatType: z.string(), attributes: z.array(z.string()).optional() }))
-          .optional(),
-      }),
-    )
-    .optional(),
-  cacheDuration: z.string().optional(),
-});
-
-type Detail = { threatType: string; attributes?: string[] };
+type Detail = FullHashDetail;
 /** Per prefix: the full hashes the server returned for it (possibly none) and when that expires. */
 type CacheEntry = { expiresAt: number; fullHashes: Map<string, Detail[]> };
 
@@ -77,15 +62,14 @@ export function createSafeBrowsingClient({
   }
 
   async function search(prefixes: string[]): Promise<Map<string, Detail[]> | null> {
+    // hashes:search only answers in protobuf: `$alt=json` is rejected with 400 "Unsupported Output Format".
     const params = new URLSearchParams(prefixes.map((p) => ["hashPrefixes", p]));
-    // Without $alt=json the API answers in binary protobuf.
-    params.set("$alt", "json");
     const started = now();
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const response = await fetchImpl(`${SEARCH_ENDPOINT}?${params}`, {
-        headers: { "X-Goog-Api-Key": apiKey, "User-Agent": userAgent, Accept: "application/json" },
+        headers: { "X-Goog-Api-Key": apiKey, "User-Agent": userAgent, Accept: "application/x-protobuf" },
         signal: controller.signal,
         cache: "no-store",
       });
@@ -93,16 +77,17 @@ export function createSafeBrowsingClient({
         console.warn("safe_browsing outcome=error", { status: response.status, durationMs: now() - started });
         return null;
       }
-      const parsed = responseSchema.safeParse(await response.json());
-      if (!parsed.success) {
+      const parsed = decodeSearchHashesResponse(new Uint8Array(await response.arrayBuffer()));
+      if (!parsed) {
         console.warn("safe_browsing outcome=error", { error: "invalid_response", durationMs: now() - started });
         return null;
       }
       const matches = new Map<string, Detail[]>();
-      for (const { fullHash: hash, fullHashDetails = [] } of parsed.data.fullHashes ?? []) {
+      for (const { fullHash: bytes, fullHashDetails } of parsed.fullHashes) {
+        const hash = bytes.toString("base64");
         matches.set(hash, [...(matches.get(hash) ?? []), ...fullHashDetails]);
       }
-      const ttl = Math.min(parseDuration(parsed.data.cacheDuration), MAX_CACHE_DURATION_MS);
+      const ttl = Math.min(parsed.cacheDurationMs, MAX_CACHE_DURATION_MS);
       if (ttl > 0) {
         // The duration covers every requested prefix, including those with no match.
         for (const prefix of prefixes) {
@@ -175,15 +160,8 @@ function enforceableThreats(hashes: Buffer[], known: Map<string, Detail[]>): Set
  * enforced, FRAME_ONLY applies to frames (not top-level navigation), and an unknown or
  * unspecified attribute means the whole detail is disregarded.
  */
-function isEnforceable({ threatType, attributes = [] }: Detail): boolean {
+function isEnforceable({ threatType, attributes }: Detail): boolean {
   return BLOCKED_THREAT_TYPES.has(threatType) && attributes.length === 0;
-}
-
-/** Protobuf Duration JSON (`"300s"`, `"3.5s"`) to milliseconds; 0 when missing or malformed. */
-function parseDuration(value: string | undefined): number {
-  const match = value?.match(/^(\d+)(?:\.(\d{1,9}))?s$/);
-  if (!match) return 0;
-  return Number(match[1]) * 1000 + Math.floor(Number(`0.${match[2] ?? "0"}`) * 1000);
 }
 
 function prefixOfBase64(hash: string): string {
