@@ -54,7 +54,7 @@ pnpm bootstrap                           # install, set up .env, start Postgres,
 Then open http://localhost:3000. `pnpm bootstrap` is safe to run again at any time:
 
 1. Checks that Docker is running (and stops with a clear message if not).
-2. Runs `pnpm install`.
+2. Runs `pnpm install --frozen-lockfile` (never rewrites `pnpm-lock.yaml`).
 3. Creates `apps/web/.env` from `.env.example` **only if it does not exist**; an existing `.env` is never touched.
 4. Starts the `oddlink-db` container and waits until it is healthy. A running container is reused, and a stopped one is started.
 5. Runs `pnpm db:migrate`.

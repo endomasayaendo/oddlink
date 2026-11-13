@@ -125,8 +125,14 @@ checkDocker();
 ok("Docker is running.");
 
 // 1. Dependencies.
-step("Installing dependencies (pnpm install)");
-if ((await pnpm(["install"])).code !== 0) die("`pnpm install` failed.");
+// --frozen-lockfile (as in CI) so setting up never rewrites pnpm-lock.yaml behind your back.
+step("Installing dependencies (pnpm install --frozen-lockfile)");
+if ((await pnpm(["install", "--frozen-lockfile"])).code !== 0) {
+  die(
+    "`pnpm install --frozen-lockfile` failed.",
+    "If pnpm-lock.yaml is out of date with package.json, run `pnpm install` yourself to update it, then rerun.",
+  );
+}
 
 // 2. Environment file. COPYFILE_EXCL makes the copy fail rather than overwrite an existing file.
 step("Checking apps/web/.env");
