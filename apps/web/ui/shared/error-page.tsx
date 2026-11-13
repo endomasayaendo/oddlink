@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { buttonClass } from "@/ui/shared/styles";
 
 type Props = {
   code: string;
@@ -8,12 +9,9 @@ type Props = {
 export function ErrorPage({ code, message }: Props) {
   return (
     <div className="mx-auto max-w-[600px] px-4 py-6 text-center sm:p-8">
-      <p className="text-brand-gradient mb-2 text-[3.5rem] font-bold sm:text-[5rem]">{code}</p>
-      <p className="mb-8 text-base text-[#666] sm:text-xl">{message}</p>
-      <Link
-        href="/"
-        className="bg-brand-gradient inline-block rounded-lg px-6 py-3 font-semibold text-white transition hover:-translate-y-px hover:no-underline hover:opacity-90"
-      >
+      <p className="mb-2 font-display text-[3.5rem] font-semibold text-tomato sm:text-[5rem]">{code}</p>
+      <p className="mb-8 text-base text-ink-muted sm:text-xl">{message}</p>
+      <Link href="/" className={`${buttonClass} px-6 py-3`}>
         Back to OddLink
       </Link>
     </div>

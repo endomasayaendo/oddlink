@@ -68,7 +68,7 @@ export function Shortener() {
   );
 }
 
-const linkClass = "underline underline-offset-2 hover:opacity-80";
+const linkClass = "underline underline-offset-2 hover:text-rust-deep";
 
 // Google's Safe Browsing terms require the attribution and a link to learn more next to a warning.
 function UnsafeUrlAdvisory() {

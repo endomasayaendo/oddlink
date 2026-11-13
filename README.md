@@ -43,17 +43,38 @@ smoke-gently-carries-blue-key
 
 ## Getting Started
 
-**Prerequisites:** Node.js 22.12+ (`.nvmrc` pins 26 — run `nvm use`), pnpm 12 (`npm i -g pnpm`), Docker
+**Prerequisites:** Node.js 22.12+ (`.nvmrc` pins 26 — run `nvm use`), pnpm 12 (`npm i -g pnpm`), and Docker **running** (Postgres runs in a container)
 
 ```bash
 git clone https://github.com/endomasayaendo/oddlink.git
 cd oddlink
+pnpm bootstrap                           # install, set up .env, start Postgres, migrate, run the dev server
+```
+
+Then open http://localhost:3000. `pnpm bootstrap` is safe to run again at any time:
+
+1. Checks that Docker is running (and stops with a clear message if not).
+2. Runs `pnpm install --frozen-lockfile` (never rewrites `pnpm-lock.yaml`).
+3. Creates `apps/web/.env` from `.env.example` **only if it does not exist**; an existing `.env` is never touched.
+4. Starts the `oddlink-db` container and waits until it is healthy. A running container is reused, and a stopped one is started.
+5. Runs `pnpm db:migrate`.
+6. Starts `pnpm dev`. Pass `--no-dev` to stop after setup instead: `pnpm bootstrap --no-dev`.
+
+Before opening a pull request, run `pnpm verify`: it runs what CI runs, in the same order (`lint` → `typecheck` → `build` without `DATABASE_URL` → `test`) and stops at the first failure. It needs Postgres running (`pnpm bootstrap` or `pnpm db:up`) and never starts anything itself.
+
+### Manual setup
+
+If you would rather run the steps yourself, this is all `pnpm bootstrap` does:
+
+```bash
 pnpm install
 cp apps/web/.env.example apps/web/.env   # defaults work out of the box
 pnpm db:up                               # start Postgres
 pnpm db:migrate                          # create tables and seed words
 pnpm dev                                 # http://localhost:3000
 ```
+
+If the port is taken, or `pnpm db:up` complains that the name `oddlink-db` is in use, another checkout's database container is probably already running on `localhost:5432`; `pnpm bootstrap` simply reuses it.
 
 ---
 
@@ -111,6 +132,7 @@ Links expire one year after they are issued.
 
 ```
 oddlink/
+├── scripts/                          bootstrap.mjs / verify.mjs (plain Node, no dependencies)
 ├── apps/
 │   └── web/                          Next.js app
 │       ├── proxy.ts                  short-link redirects, `+` previews and the analytics 404 check (runs before routing)
@@ -142,6 +164,8 @@ Run from the repository root; Turborepo runs each task in every package that def
 
 | Command | |
 |---|---|
+| `pnpm bootstrap` | One-command local setup (see [Getting Started](#getting-started)); `--no-dev` skips starting the dev server |
+| `pnpm verify` | Run the CI checks locally: lint, typecheck, build (without `DATABASE_URL`), test. Needs Postgres running |
 | `pnpm dev` / `build` / `start` | Next.js dev server / production build / production server |
 | `pnpm lint` / `typecheck` | Lint / type check |
 | `pnpm test` | Run tests (needs `db:up`; creates `oddlink_test` automatically) |
