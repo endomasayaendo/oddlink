@@ -17,7 +17,7 @@ function HistoryItem({ entry, onRemove }: { entry: HistoryEntry; onRemove: (shor
   return (
     <li className="border-b border-ink/20 py-3 first:border-t sm:py-2.5">
       <div className="flex flex-col items-start gap-1.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-        <div className="flex w-full flex-1 flex-col gap-0.5 overflow-hidden">
+        <div className="flex w-full min-w-0 flex-1 flex-col gap-0.5">
           <a
             href={entry.shortUrl}
             target="_blank"

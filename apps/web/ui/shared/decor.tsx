@@ -13,12 +13,15 @@ export function EyedSun({ className = "" }: DecorProps) {
   );
 }
 
-/** A faint tea-colored stain on the paper. */
+/**
+ * A faint tea-colored stain on the paper. It sits behind text on narrow screens (the history
+ * list), so the peak stays at 10%: small ink-muted and tomato-deep text over it still pass AA.
+ */
 export function Stain({ className = "" }: DecorProps) {
   return (
     <div
       aria-hidden="true"
-      className={`pointer-events-none h-[46px] w-[70px] rounded-full bg-[radial-gradient(ellipse_at_40%_40%,rgba(130,70,40,0.22),rgba(130,70,40,0.08)_60%,transparent_70%)] ${className}`}
+      className={`pointer-events-none h-[46px] w-[70px] rounded-full bg-[radial-gradient(ellipse_at_40%_40%,rgba(130,70,40,0.1),rgba(130,70,40,0.04)_60%,transparent_70%)] ${className}`}
     />
   );
 }

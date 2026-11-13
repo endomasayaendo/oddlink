@@ -69,4 +69,15 @@
     outline: 3px solid var(--color-ink);
     outline-offset: 3px;
   }
+
+  /* Fade-ins and the button press are decoration: drop them for people who ask for less motion. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
 }
