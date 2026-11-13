@@ -4,6 +4,12 @@ import { useActionState, useState } from "react";
 import { issueAction, type IssueState } from "@/lib/actions/issue-link";
 import { useHistory } from "@/ui/links/use-history";
 import { ErrorMessage } from "@oddlink/ui";
+import {
+  ADVISORY_TEXT,
+  ADVISORY_URL,
+  MALWARE_INFO_URL,
+  SOCIAL_ENGINEERING_INFO_URL,
+} from "@/lib/links/safe-browsing/advisory";
 import { HistoryList } from "./history-list";
 import { ResultCard } from "./result-card";
 import { UrlForm } from "./url-form";
@@ -33,6 +39,7 @@ export function Shortener() {
   }, null);
 
   const error = copyError || (state && !state.ok && state !== dismissed ? state.message : "");
+  const showAdvisory = !copyError && !!state && !state.ok && state !== dismissed && "reason" in state;
 
   return (
     <>
@@ -45,7 +52,9 @@ export function Shortener() {
             setCopyError("");
             setDismissed(state);
           }}
-        />
+        >
+          {showAdvisory && <UnsafeUrlAdvisory />}
+        </ErrorMessage>
       )}
 
       {state?.ok && (
@@ -56,5 +65,26 @@ export function Shortener() {
 
       <HistoryList history={history} onRemove={removeEntry} />
     </>
+  );
+}
+
+const linkClass = "underline underline-offset-2 hover:text-rust-deep";
+
+// Google's Safe Browsing terms require the attribution and a link to learn more next to a warning.
+function UnsafeUrlAdvisory() {
+  return (
+    <span className="mt-1 block text-[0.8rem]">
+      <a href={ADVISORY_URL} target="_blank" rel="noopener noreferrer" className={linkClass}>
+        {ADVISORY_TEXT}
+      </a>
+      {" · Learn more about "}
+      <a href={SOCIAL_ENGINEERING_INFO_URL} target="_blank" rel="noopener noreferrer" className={linkClass}>
+        phishing
+      </a>
+      {" and "}
+      <a href={MALWARE_INFO_URL} target="_blank" rel="noopener noreferrer" className={linkClass}>
+        malware
+      </a>
+    </span>
   );
 }
