@@ -38,17 +38,25 @@ export function die(message, hint) {
 }
 
 /**
- * Runs a command with inherited stdio and resolves with its exit status. Arguments are always an
- * array, never a shell string. `pnpm` is a `.cmd` shim on Windows, which Node can only spawn
- * through a shell; that is safe here because every pnpm argument is a fixed literal.
+ * `pnpm` is a `.cmd` shim on Windows, which Node can only spawn through a shell. Passing an args
+ * array together with `shell: true` triggers DEP0190 on Node 24+, so on Windows the command line is
+ * joined here instead. That is safe because every pnpm argument in these scripts is a fixed literal.
  */
+function spawnArgs(command, args) {
+  return isWindows && command === "pnpm"
+    ? [[command, ...args].join(" "), [], true]
+    : [command, args, false];
+}
+
+/** Runs a command with inherited stdio and resolves with its exit status. */
 export function run(command, args, { env, onChild } = {}) {
   return new Promise((resolve) => {
-    const child = spawn(command, args, {
+    const [file, argv, shell] = spawnArgs(command, args);
+    const child = spawn(file, argv, {
       cwd: ROOT,
       stdio: "inherit",
       env: env ? { ...process.env, ...env } : process.env,
-      shell: isWindows && command === "pnpm",
+      shell,
     });
     onChild?.(child);
     child.on("error", (error) => {
@@ -63,11 +71,8 @@ export const pnpm = (args, options) => run("pnpm", args, options);
 
 /** Runs a short command and captures its output. Never throws. */
 export function capture(command, args) {
-  const result = spawnSync(command, args, {
-    cwd: ROOT,
-    encoding: "utf8",
-    shell: isWindows && command === "pnpm",
-  });
+  const [file, argv, shell] = spawnArgs(command, args);
+  const result = spawnSync(file, argv, { cwd: ROOT, encoding: "utf8", shell });
   return {
     code: result.status,
     stdout: result.stdout ?? "",

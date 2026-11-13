@@ -18,7 +18,8 @@ let host = "localhost";
 let port = 5432;
 try {
   const url = new URL(testDatabaseUrl);
-  host = url.hostname || host;
+  // An IPv6 host comes back bracketed ("[::1]"), which net.connect() does not accept.
+  host = url.hostname.replace(/^\[(.*)\]$/, "$1") || host;
   port = Number(url.port) || port;
 } catch {
   // Not a parseable URL: fall through to the default and let the tests report the real problem.

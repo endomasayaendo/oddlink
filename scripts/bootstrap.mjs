@@ -32,8 +32,9 @@ function checkDocker() {
   }
   if (result.code !== 0) {
     die(
-      "Docker is installed but not running.",
-      "Start Docker Desktop (or the Docker daemon), wait until it is ready, then run `pnpm bootstrap` again.",
+      "Docker is installed but not running (or this user cannot reach the daemon).",
+      `${result.stderr.trim()}\n\n` +
+        "Start Docker Desktop (or the Docker daemon), wait until it is ready, then run `pnpm bootstrap` again.",
     );
   }
 }
@@ -46,9 +47,14 @@ function containerState() {
   die(`Could not inspect the \`${DB_CONTAINER}\` container.`, result.stderr.trim());
 }
 
-/** "healthy" / "unhealthy" / "starting", or the plain status if the image has no healthcheck. */
+/**
+ * The plain status unless the container is running; then "healthy" / "unhealthy" / "starting", or
+ * "running" if the image has no healthcheck. The status is checked first because a stopped
+ * container can keep its last health value.
+ */
 function containerHealth() {
-  const format = "{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}";
+  const format =
+    "{{if and (eq .State.Status \"running\") .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}";
   const result = capture("docker", ["container", "inspect", "--format", format, DB_CONTAINER]);
   return result.code === 0 ? result.stdout.trim() : "missing";
 }
