@@ -12,14 +12,14 @@ export function ErrorMessage({ message, onDismiss, className = "mb-6" }: Props) 
   return (
     <div
       role="alert"
-      className={`flex animate-fade-in-down items-center gap-3 rounded-lg border border-[#feb2b2] bg-[#fff5f5] px-4 py-3.5 ${className}`}
+      className={`flex animate-fade-in-down items-center gap-3 rounded-wobble border-2 border-rust bg-rust-wash px-4 py-3.5 ${className}`}
     >
-      <span className="flex-1 text-left text-[0.9rem] text-[#c53030]">{message}</span>
+      <span className="flex-1 text-left text-[0.9rem] text-rust">{message}</span>
       <button
         type="button"
         onClick={onDismiss}
         aria-label="Close"
-        className="cursor-pointer text-xl leading-none text-[#c53030] opacity-60 transition-opacity hover:opacity-100"
+        className="cursor-pointer text-xl leading-none text-rust transition-colors hover:text-rust-deep"
       >
         &times;
       </button>

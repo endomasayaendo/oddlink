@@ -8,25 +8,25 @@ type Props = {
   onRemove: (shortCode: string) => void;
 };
 
-const actionClass = "cursor-pointer text-xs whitespace-nowrap text-[#aaa] transition-colors hover:text-brand hover:no-underline";
+const actionClass = "cursor-pointer text-xs whitespace-nowrap text-ink-muted transition-colors hover:text-tomato-deep hover:no-underline";
 
 function HistoryItem({ entry, onRemove }: { entry: HistoryEntry; onRemove: (shortCode: string) => void }) {
   const [copyError, setCopyError] = useState("");
   const { copied, copy } = useCopy(setCopyError);
 
   return (
-    <li className="border-b border-[#ebebeb] py-3 first:border-t sm:py-2.5">
+    <li className="border-b border-ink/20 py-3 first:border-t sm:py-2.5">
       <div className="flex flex-col items-start gap-1.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
         <div className="flex w-full flex-1 flex-col gap-0.5 overflow-hidden">
           <a
             href={entry.shortUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="truncate text-[0.8rem] font-medium text-[#555] hover:text-brand"
+            className="truncate text-[0.8rem] font-medium text-ink hover:text-tomato-deep"
           >
             {entry.shortUrl}
           </a>
-          <span className="truncate text-[0.7rem] text-[#bbb]" title={entry.originalUrl}>
+          <span className="truncate text-[0.7rem] text-ink-muted" title={entry.originalUrl}>
             {entry.originalUrl}
           </span>
         </div>
@@ -48,7 +48,7 @@ function HistoryItem({ entry, onRemove }: { entry: HistoryEntry; onRemove: (shor
             type="button"
             onClick={() => onRemove(entry.shortCode)}
             aria-label="Remove"
-            className="ml-4 cursor-pointer text-base leading-none text-[#ddd] transition-colors hover:text-[#aaa]"
+            className="ml-4 cursor-pointer text-base leading-none text-ink-muted transition-colors hover:text-tomato-deep"
           >
             ×
           </button>
@@ -64,7 +64,7 @@ export function HistoryList({ history, onRemove }: Props) {
 
   return (
     <div className="mt-8 animate-fade-in-up text-left">
-      <p className="mb-2 text-xs font-semibold tracking-wider text-[#bbb] uppercase">Recent links</p>
+      <p className="mb-2 text-xs font-semibold tracking-wider text-ink-muted uppercase">Recent links</p>
       <ul>
         {history.map((entry) => (
           <HistoryItem key={entry.shortCode} entry={entry} onRemove={onRemove} />
