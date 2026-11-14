@@ -1,6 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { POST } from "@/app/api/issue/route";
 import { resetUrlTables } from "../utils/reset-db";
+
+const checkUrlSafety = vi.hoisted(() => vi.fn<(url: string) => Promise<"safe" | "unsafe" | "unknown">>(async () => "safe"));
+vi.mock("@/lib/links/safe-browsing", () => ({ checkUrlSafety }));
 
 resetUrlTables();
 
@@ -37,5 +40,22 @@ describe("POST /api/issue", () => {
   it("returns 400 when the body is empty or not JSON", async () => {
     expect((await post()).status).toBe(400);
     expect((await post("{oops")).status).toBe(400);
+  });
+
+  it("returns 422 with Google's advisory when Safe Browsing flags the URL", async () => {
+    checkUrlSafety.mockResolvedValueOnce("unsafe");
+    const res = await post(JSON.stringify({ originalUrl: "https://phish.example/login" }));
+    expect(res.status).toBe(422);
+    expect(await res.json()).toEqual({
+      message: "This URL may be unsafe (suspected phishing or malware), so it can't be shortened.",
+      advisory: "Advisory provided by Google",
+      advisoryUrl: "https://developers.google.com/safe-browsing/v4/advisory",
+    });
+  });
+
+  it("still issues the link when the check is unavailable", async () => {
+    checkUrlSafety.mockResolvedValueOnce("unknown");
+    const res = await post(JSON.stringify({ originalUrl: "https://example.com" }));
+    expect(res.status).toBe(200);
   });
 });

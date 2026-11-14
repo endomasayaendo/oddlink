@@ -12,6 +12,8 @@ export type Env = {
   DATABASE_URL: string | undefined;
   /** IANA time zone used for daily click counts. */
   APP_TIME_ZONE: string;
+  /** Google Safe Browsing API key (secret). Only guaranteed to be present in `runtime` mode. */
+  SAFE_BROWSING_API_KEY: string | undefined;
 };
 
 type EnvSource = Record<string, string | undefined>;
@@ -93,6 +95,9 @@ const timeZoneValue = z.string().refine(
   { error: "must be an IANA time zone name such as Asia/Tokyo or UTC" },
 );
 
+// Opaque secret: only checked for presence and shape, and never echoed in messages.
+const safeBrowsingKeyValue = z.string().regex(/^\S+$/, { error: "must not contain whitespace" });
+
 function buildSchema(mode: EnvMode) {
   const baseUrl =
     mode === "runtime" ? requiredWhen(mode, "BASE_URL").pipe(baseUrlValue) : baseUrlValue;
@@ -109,18 +114,25 @@ function buildSchema(mode: EnvMode) {
       mode === "runtime" ? databaseUrl : databaseUrl.optional(),
     ),
     APP_TIME_ZONE: z.preprocess(emptyAsUnset, timeZoneValue.default(DEFAULT_TIME_ZONE)),
+    SAFE_BROWSING_API_KEY: z.preprocess(
+      emptyAsUnset,
+      mode === "runtime"
+        ? requiredWhen(mode, "SAFE_BROWSING_API_KEY").pipe(safeBrowsingKeyValue)
+        : safeBrowsingKeyValue.optional(),
+    ),
   });
 }
 
 /**
  * Validates the environment and throws one Error listing every problem. Messages are built from
- * issue paths and our own text only, never from the input values: DATABASE_URL holds a password.
+ * issue paths and our own text only, never from the input values: DATABASE_URL holds a password and SAFE_BROWSING_API_KEY is a secret.
  */
 export function parseEnv(source: EnvSource, mode: EnvMode): Env {
   const result = buildSchema(mode).safeParse({
     BASE_URL: source.BASE_URL,
     DATABASE_URL: source.DATABASE_URL,
     APP_TIME_ZONE: source.APP_TIME_ZONE,
+    SAFE_BROWSING_API_KEY: source.SAFE_BROWSING_API_KEY,
   });
   if (!result.success) {
     const lines = result.error.issues.map((issue) => `- ${issue.path.join(".")}: ${issue.message}`);

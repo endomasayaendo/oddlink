@@ -43,17 +43,38 @@ smoke-gently-carries-blue-key
 
 ## Getting Started
 
-**Prerequisites:** Node.js 22.12+ (`.nvmrc` pins 26 — run `nvm use`), pnpm 12 (`npm i -g pnpm`), Docker
+**Prerequisites:** Node.js 22.12+ (`.nvmrc` pins 26 — run `nvm use`), pnpm 12 (`npm i -g pnpm`), and Docker **running** (Postgres runs in a container)
 
 ```bash
 git clone https://github.com/endomasayaendo/oddlink.git
 cd oddlink
+pnpm bootstrap                           # install, set up .env, start Postgres, migrate, run the dev server
+```
+
+Then open http://localhost:3000. `pnpm bootstrap` is safe to run again at any time:
+
+1. Checks that Docker is running (and stops with a clear message if not).
+2. Runs `pnpm install --frozen-lockfile` (never rewrites `pnpm-lock.yaml`).
+3. Creates `apps/web/.env` from `.env.example` **only if it does not exist**; an existing `.env` is never touched.
+4. Starts the `oddlink-db` container and waits until it is healthy. A running container is reused, and a stopped one is started.
+5. Runs `pnpm db:migrate`.
+6. Starts `pnpm dev`. Pass `--no-dev` to stop after setup instead: `pnpm bootstrap --no-dev`.
+
+Before opening a pull request, run `pnpm verify`: it runs what CI runs, in the same order (`lint` → `typecheck` → `build` without `DATABASE_URL` → `test`) and stops at the first failure. It needs Postgres running (`pnpm bootstrap` or `pnpm db:up`) and never starts anything itself.
+
+### Manual setup
+
+If you would rather run the steps yourself, this is all `pnpm bootstrap` does:
+
+```bash
 pnpm install
 cp apps/web/.env.example apps/web/.env   # defaults work out of the box
 pnpm db:up                               # start Postgres
 pnpm db:migrate                          # create tables and seed words
 pnpm dev                                 # http://localhost:3000
 ```
+
+If the port is taken, or `pnpm db:up` complains that the name `oddlink-db` is in use, another checkout's database container is probably already running on `localhost:5432`; `pnpm bootstrap` simply reuses it.
 
 ---
 
@@ -82,7 +103,13 @@ curl -X POST http://localhost:3000/api/issue \
 }
 ```
 
-Errors return `{"message": "..."}`: `400` for a blank or invalid URL (only `http`/`https` are accepted), `503` if no unique phrase could be generated.
+Errors return `{"message": "..."}`: `400` for a blank or invalid URL (only `http`/`https` are accepted), `422` if Google Safe Browsing flags the URL (the body also carries `"advisory": "Advisory provided by Google"` and `"advisoryUrl"`), `503` if no unique phrase could be generated.
+
+### Safe Browsing check
+
+Before issuing, the destination is looked up in [Google Safe Browsing v5](https://developers.google.com/safe-browsing/reference) in [No-Storage Real-Time mode](https://developers.google.com/safe-browsing/reference/No.Storage.Real.Time.Mode): only 4-byte SHA-256 hash prefixes of the URL's host/path expressions are sent, never the URL itself (`apps/web/lib/links/safe-browsing/`). Matches for malware, social engineering, unwanted software and potentially harmful applications are refused. Answers are cached in memory per prefix (at most 30 minutes). If Google is slow (> 1 s), down, rate-limits us, or no key is set, the link is issued anyway (fail open).
+
+Setting up the key: create an API key in the Google Cloud console with the Safe Browsing API enabled, **restrict the key to the Safe Browsing API**, and set `SAFE_BROWSING_API_KEY` for every environment that runs `next start` — on Vercel that includes Preview deployments, not just Production. The Safe Browsing API is for non-commercial use; a commercial OddLink would move to Web Risk.
 
 Links expire one year after they are issued.
 
@@ -105,6 +132,7 @@ Links expire one year after they are issued.
 
 ```
 oddlink/
+├── scripts/                          bootstrap.mjs / verify.mjs (plain Node, no dependencies)
 ├── apps/
 │   └── web/                          Next.js app
 │       ├── proxy.ts                  short-link redirects, `+` previews and the analytics 404 check (runs before routing)
@@ -136,6 +164,8 @@ Run from the repository root; Turborepo runs each task in every package that def
 
 | Command | |
 |---|---|
+| `pnpm bootstrap` | One-command local setup (see [Getting Started](#getting-started)); `--no-dev` skips starting the dev server |
+| `pnpm verify` | Run the CI checks locally: lint, typecheck, build (without `DATABASE_URL`), test. Needs Postgres running |
 | `pnpm dev` / `build` / `start` | Next.js dev server / production build / production server |
 | `pnpm lint` / `typecheck` | Lint / type check |
 | `pnpm test` | Run tests (needs `db:up`; creates `oddlink_test` automatically) |
@@ -155,8 +185,9 @@ Set in `apps/web/.env`, or in the shell (`turbo.json` passes these through to th
 |----------|---------|----------|-------------|
 | `DATABASE_URL` | — | In production | Postgres connection string (`postgres://` or `postgresql://`) |
 | `BASE_URL` | `http://localhost:3000` | In production | Absolute `http`/`https` URL used in generated short links; no credentials, query or fragment; trailing slashes are removed |
+| `SAFE_BROWSING_API_KEY` | — | In production | Google Safe Browsing API key used to refuse phishing/malware URLs when issuing. Without it (dev, tests) the check is skipped with one warning |
 | `APP_TIME_ZONE` | `Asia/Tokyo` | No | IANA time zone name (e.g. `Asia/Tokyo`, `UTC`) for daily click counts and dates; offsets like `+09:00` are rejected |
 | `TEST_DATABASE_URL` | — | For `pnpm test` | Database used by the tests (not read by the app) |
 | `DB_NAME` / `DB_USERNAME` / `DB_PASSWORD` | `oddlink` / `postgres` / `postgres` | No | Used by `apps/web/docker-compose.yml` |
 
-The app validates these at startup (`apps/web/lib/env.ts`). In production (`next start`), a missing `BASE_URL` or `DATABASE_URL`, or any malformed value, prints every problem and exits. In development and tests, missing values fall back to the defaults. `next build` needs none of them.
+The app validates these at startup (`apps/web/lib/env.ts`). In production (`next start`), a missing `BASE_URL`, `DATABASE_URL` or `SAFE_BROWSING_API_KEY`, or any malformed value, prints every problem and exits. In development and tests, missing values fall back to the defaults. `next build` needs none of them.

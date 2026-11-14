@@ -1,10 +1,35 @@
 /* OddLink design tokens and utilities, shared by apps and packages/ui. */
+
+/*
+ * Storybook palette. `static` so every token reaches :root even when it is only referenced
+ * as var(--color-*) from JS (the chart, inline styles), where Tailwind can't see it as a class.
+ * Contrast notes (WCAG AA): tomato is for text 24px+ and decoration only (3.9:1 on paper);
+ * small text and links use tomato-deep (5.2:1 on paper, white on it 6.0:1). Text on mustard
+ * stays ink (tomato-deep on mustard is only 4.17:1).
+ */
+@theme static {
+  --color-paper: #f6eedb;
+  --color-paper-light: #fffaf0;
+  --color-paper-old: #e9e3d3;
+  --color-ink: #5a3e2b;
+  --color-ink-strong: #4a3020;
+  --color-ink-muted: #6e5240;
+  --color-tomato: #c2553a;
+  --color-tomato-deep: #a5452f;
+  --color-mustard: #efd58a;
+  --color-rust: #8f3b26;
+  --color-rust-deep: #7a2f1e;
+  --color-rust-wash: #fbeee4;
+  --color-underside: #2e211b;
+}
+
 @theme {
-  --color-brand: #667eea;
-  --color-brand-end: #764ba2;
-  --color-ink: #213547;
-  --font-sans: system-ui, Avenir, Helvetica, Arial, sans-serif;
-  --font-typewriter: var(--font-special-elite), cursive;
+  --font-display: var(--font-fredoka), ui-rounded, system-ui, sans-serif;
+  --font-sans: var(--font-nunito), system-ui, Avenir, Helvetica, Arial, sans-serif;
+  --font-hand: var(--font-patrick-hand), "Comic Sans MS", cursive;
+
+  --shadow-offset: 3px 3px 0 var(--color-ink-strong);
+  --shadow-offset-sm: 1px 1px 0 var(--color-ink-strong);
 
   --animate-fade-in-down: fade-in-down 0.3s ease-out;
   --animate-fade-in-up: fade-in-up 0.4s ease-out;
@@ -19,12 +44,40 @@
   }
 }
 
-@utility bg-brand-gradient {
-  background-image: linear-gradient(135deg, var(--color-brand) 0%, var(--color-brand-end) 100%);
+/* A hand-drawn, slightly uneven outline. Scales down on small boxes like any border-radius. */
+@utility rounded-wobble {
+  border-radius: 255px 14px 225px 14px / 14px 225px 14px 255px;
 }
 
-@utility text-brand-gradient {
-  background-image: linear-gradient(135deg, var(--color-brand) 0%, var(--color-brand-end) 100%);
-  background-clip: text;
-  color: transparent;
+/* Paper grain: an inline SVG noise tile laid behind everything, so no image asset is shipped. */
+@utility paper-texture {
+  isolation: isolate;
+
+  &::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 .35 0 0 0 0 .25 0 0 0 0 .15 0 0 0 .09 0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+}
+
+@layer base {
+  /* Ink on paper is 8.4:1, and the offset keeps the ring clear of wobbly borders. */
+  :focus-visible {
+    outline: 3px solid var(--color-ink);
+    outline-offset: 3px;
+  }
+
+  /* Fade-ins and the button press are decoration: drop them for people who ask for less motion. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
 }
