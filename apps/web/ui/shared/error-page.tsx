@@ -13,7 +13,7 @@ const stillWhenReduced = "motion-reduce:animate-none";
 // Layers, back to front: old paper, the sinking sun, rust, fog, then the content. Fog and rust
 // stay behind the content so text and the button keep their resting contrast at every frame.
 export function ErrorPage({ code, message }: Props) {
-  // The last character sags and is eaten away; split into spans, it still reads as one word.
+  // The last character sags and is eaten away.
   const head = code.slice(0, -1);
   const tail = code.slice(-1);
 
@@ -36,8 +36,12 @@ export function ErrorPage({ code, message }: Props) {
         <p
           className={`mb-2 font-display text-[3.5rem] leading-tight font-semibold text-rust sm:text-[5rem] animate-flicker ${stillWhenReduced}`}
         >
-          {head}
-          <span className="decayed inline-block translate-y-1.5 rotate-[7deg] text-rust-deep">{tail}</span>
+          {/* Split for the look only; screen readers get the code as one word ("404", not "40 4"). */}
+          <span aria-hidden="true">
+            {head}
+            <span className="decayed inline-block translate-y-1.5 rotate-[7deg] text-rust-deep">{tail}</span>
+          </span>
+          <span className="sr-only">{code}</span>
         </p>
         <p className={`mb-10 font-hand text-xl text-ink sm:text-2xl animate-flicker-late ${stillWhenReduced}`}>{message}</p>
         <div className="relative inline-block">

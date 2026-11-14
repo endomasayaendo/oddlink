@@ -64,10 +64,10 @@
   /* Two short jolts per 6s cycle (well under 3 per second): position and a ghosted shadow only. */
   @keyframes flicker {
     0%, 100% { translate: 0; text-shadow: none; }
-    88% { translate: 1px 0; text-shadow: -3px 0 rgb(122 47 30 / 0.35); }
-    89% { translate: -1px 0; text-shadow: 2px 1px rgb(122 47 30 / 0.3); }
+    88% { translate: 1px 0; text-shadow: -3px 0 color-mix(in srgb, var(--color-rust-deep) 35%, transparent); }
+    89% { translate: -1px 0; text-shadow: 2px 1px color-mix(in srgb, var(--color-rust-deep) 30%, transparent); }
     90% { translate: 0; text-shadow: none; }
-    95% { translate: -1px 0; text-shadow: 3px 0 rgb(122 47 30 / 0.3); }
+    95% { translate: -1px 0; text-shadow: 3px 0 color-mix(in srgb, var(--color-rust-deep) 30%, transparent); }
     96% { translate: 0; text-shadow: none; }
   }
   @keyframes drip {
@@ -134,10 +134,10 @@
 /* A-2 rust: blotchy rust creeping in from all four corners, broken up by the noise mask. */
 @utility rust-corners {
   background:
-    radial-gradient(circle at 0 0, rgb(122 47 30 / 0.62), rgb(143 59 38 / 0.3) 70px, transparent 190px),
-    radial-gradient(circle at 100% 0, rgb(122 47 30 / 0.55), rgb(143 59 38 / 0.26) 60px, transparent 170px),
-    radial-gradient(circle at 0 100%, rgb(122 47 30 / 0.5), rgb(143 59 38 / 0.22) 60px, transparent 160px),
-    radial-gradient(circle at 100% 100%, rgb(122 47 30 / 0.6), rgb(143 59 38 / 0.3) 80px, transparent 200px);
+    radial-gradient(circle at 0 0, color-mix(in srgb, var(--color-rust-deep) 62%, transparent), color-mix(in srgb, var(--color-rust) 30%, transparent) 70px, transparent 190px),
+    radial-gradient(circle at 100% 0, color-mix(in srgb, var(--color-rust-deep) 55%, transparent), color-mix(in srgb, var(--color-rust) 26%, transparent) 60px, transparent 170px),
+    radial-gradient(circle at 0 100%, color-mix(in srgb, var(--color-rust-deep) 50%, transparent), color-mix(in srgb, var(--color-rust) 22%, transparent) 60px, transparent 160px),
+    radial-gradient(circle at 100% 100%, color-mix(in srgb, var(--color-rust-deep) 60%, transparent), color-mix(in srgb, var(--color-rust) 30%, transparent) 80px, transparent 200px);
   mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='800' height='800'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.012' numOctaves='3' seed='7' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 4 0 0 0 -1.2'/%3E%3C/filter%3E%3Crect width='800' height='800' filter='url(%23n)'/%3E%3C/svg%3E");
   /* One tile over the whole page: repeating noise leaves visible seams. */
   mask-size: cover;

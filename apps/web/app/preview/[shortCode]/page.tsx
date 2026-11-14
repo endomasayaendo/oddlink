@@ -21,9 +21,13 @@ export default function PreviewPage({ params }: PageProps<"/preview/[shortCode]"
     <main className="mx-auto max-w-[720px] px-4 py-6 sm:p-8">
       <div className="mb-8 text-center">
         <Link href="/" className="font-display text-2xl font-semibold text-tomato hover:no-underline sm:text-[2rem]">
-          {/* A-1's odd touch here: one letter has been put back upside down. The spans don't
-              change the link's accessible name, which still reads "OddLink". */}
-          OddL<span className="inline-block rotate-180">i</span>nk
+          {/* A-1's odd touch here: one letter has been put back upside down. The split word is
+              hidden from assistive tech (some screen readers stop at the inline-block span) and
+              the link's name comes from the sr-only copy, so it always reads "OddLink". */}
+          <span aria-hidden="true">
+            OddL<span className="inline-block rotate-180">i</span>nk
+          </span>
+          <span className="sr-only">OddLink</span>
         </Link>
       </div>
       {/* The link is live data, so it streams in behind the static header. */}
