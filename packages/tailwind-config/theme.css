@@ -42,6 +42,61 @@
     from { opacity: 0; transform: translateY(12px); }
     to { opacity: 1; transform: translateY(0); }
   }
+
+  /*
+   * The eerie layer. None of these touch the opacity or color of text, so every frame keeps the
+   * resting contrast; everything that moves is switched off under prefers-reduced-motion.
+   */
+  --animate-fog-drift: fog-drift 14s ease-in-out infinite alternate;
+  --animate-fog-drift-slow: fog-drift 23s ease-in-out -9s infinite alternate-reverse;
+  --animate-flicker: flicker 6s steps(1, end) infinite;
+  --animate-flicker-late: flicker 6s steps(1, end) -2.7s infinite;
+  --animate-drip: drip 9s ease-in-out infinite alternate;
+  --animate-blink: blink 9s ease-in-out infinite;
+  --animate-eye-drift: eye-drift 17s ease-in-out infinite;
+  --animate-flip: flip 0.45s ease-in-out both;
+  --animate-glimpse: glimpse 0.45s ease-out both;
+
+  @keyframes fog-drift {
+    from { transform: translateX(-6%); }
+    to { transform: translateX(6%); }
+  }
+  /* Two short jolts per 6s cycle (well under 3 per second): position and a ghosted shadow only. */
+  @keyframes flicker {
+    0%, 100% { translate: 0; text-shadow: none; }
+    88% { translate: 1px 0; text-shadow: -3px 0 color-mix(in srgb, var(--color-rust-deep) 35%, transparent); }
+    89% { translate: -1px 0; text-shadow: 2px 1px color-mix(in srgb, var(--color-rust-deep) 30%, transparent); }
+    90% { translate: 0; text-shadow: none; }
+    95% { translate: -1px 0; text-shadow: 3px 0 color-mix(in srgb, var(--color-rust-deep) 30%, transparent); }
+    96% { translate: 0; text-shadow: none; }
+  }
+  @keyframes drip {
+    from { scale: 1 0.85; }
+    to { scale: 1 1.15; }
+  }
+  /* A slow blink: the eye is shut for about a third of a second every 9s. */
+  @keyframes blink {
+    0%, 92%, 97%, 100% { scale: 1 1; }
+    94.5% { scale: 1 0.08; }
+  }
+  @keyframes eye-drift {
+    0%, 100% { translate: 0 0; }
+    30% { translate: -2.5px 0.5px; }
+    55% { translate: 1.5px -1px; }
+    80% { translate: 2.5px 1px; }
+  }
+  /* The page turns over once: a single dark flash (capped at 0.92, never black) and back. */
+  @keyframes flip {
+    0% { opacity: 0; transform: perspective(900px) rotateX(0) skewY(0); }
+    35% { opacity: 0.92; transform: perspective(900px) rotateX(6deg) skewY(-2deg); }
+    70% { opacity: 0.92; transform: perspective(900px) rotateX(-3deg) skewY(1deg); }
+    100% { opacity: 0; transform: none; }
+  }
+  @keyframes glimpse {
+    0%, 25% { opacity: 0; scale: 0.96; }
+    50% { opacity: 1; scale: 1; }
+    80%, 100% { opacity: 0; scale: 1.02; }
+  }
 }
 
 /* A hand-drawn, slightly uneven outline. Scales down on small boxes like any border-radius. */
@@ -61,6 +116,37 @@
     pointer-events: none;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 .35 0 0 0 0 .25 0 0 0 0 .15 0 0 0 .09 0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
   }
+}
+
+/*
+ * A-2 fog: pale banks of mist rising from the bottom. Always placed behind the content (-z-10),
+ * so it only ever lightens what sits under dark text and never veils text or buttons.
+ */
+@utility fog {
+  background:
+    radial-gradient(ellipse 38% 55% at 18% 100%, rgb(252 249 241 / 0.95), transparent 70%),
+    radial-gradient(ellipse 42% 48% at 62% 100%, rgb(250 246 236 / 0.92), transparent 72%),
+    radial-gradient(ellipse 30% 40% at 92% 96%, rgb(244 240 230 / 0.9), transparent 70%),
+    radial-gradient(ellipse 60% 30% at 45% 78%, rgb(236 232 222 / 0.75), transparent 75%),
+    linear-gradient(to top, rgb(250 247 239 / 0.85), transparent 60%);
+}
+
+/* A-2 rust: blotchy rust creeping in from all four corners, broken up by the noise mask. */
+@utility rust-corners {
+  background:
+    radial-gradient(circle at 0 0, color-mix(in srgb, var(--color-rust-deep) 62%, transparent), color-mix(in srgb, var(--color-rust) 30%, transparent) 70px, transparent 190px),
+    radial-gradient(circle at 100% 0, color-mix(in srgb, var(--color-rust-deep) 55%, transparent), color-mix(in srgb, var(--color-rust) 26%, transparent) 60px, transparent 170px),
+    radial-gradient(circle at 0 100%, color-mix(in srgb, var(--color-rust-deep) 50%, transparent), color-mix(in srgb, var(--color-rust) 22%, transparent) 60px, transparent 160px),
+    radial-gradient(circle at 100% 100%, color-mix(in srgb, var(--color-rust-deep) 60%, transparent), color-mix(in srgb, var(--color-rust) 30%, transparent) 80px, transparent 200px);
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='800' height='800'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.012' numOctaves='3' seed='7' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 4 0 0 0 -1.2'/%3E%3C/filter%3E%3Crect width='800' height='800' filter='url(%23n)'/%3E%3C/svg%3E");
+  /* One tile over the whole page: repeating noise leaves visible seams. */
+  mask-size: cover;
+  mask-repeat: no-repeat;
+}
+
+/* Pits eaten into a glyph: noise thresholded into an alpha mask with small holes. */
+@utility decayed {
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='90' height='90'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.12' numOctaves='2' seed='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 -14 0 0 0 9.5'/%3E%3C/filter%3E%3Crect width='90' height='90' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
 @layer base {

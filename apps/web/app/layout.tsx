@@ -15,7 +15,7 @@ const nunito = Nunito({
   display: "swap",
 });
 
-// Only the result card's phrase uses it, so don't preload it on every page.
+// Only the result card and the not-found pages use it, so don't preload it on every page.
 const patrickHand = Patrick_Hand({
   variable: "--font-patrick-hand",
   weight: "400",

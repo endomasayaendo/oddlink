@@ -10,6 +10,7 @@ import {
   MALWARE_INFO_URL,
   SOCIAL_ENGINEERING_INFO_URL,
 } from "@/lib/links/safe-browsing/advisory";
+import { FlipOverlay } from "./flip-overlay";
 import { HistoryList } from "./history-list";
 import { ResultCard } from "./result-card";
 import { UrlForm } from "./url-form";
@@ -56,6 +57,9 @@ export function Shortener() {
           {showAdvisory && <UnsafeUrlAdvisory />}
         </ErrorMessage>
       )}
+
+      {/* Keyed by code: the page turns over once per issued link, never on failures or history edits. */}
+      {state?.ok && <FlipOverlay key={state.shortCode} />}
 
       {state?.ok && (
         <div className="flex justify-center">
