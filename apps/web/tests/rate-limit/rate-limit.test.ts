@@ -38,6 +38,13 @@ describe("consumeRateLimit", () => {
     expect(row.count).toBe(limit.max + 1);
   });
 
+  it("does not overflow int4 at the largest allowed max", async () => {
+    const options = { max: 2_147_483_646, windowSeconds: 60 };
+    await hit("big", options);
+    await db.execute(sql`UPDATE rate_limits SET count = 2147483647`);
+    expect((await hit("big", options)).allowed).toBe(false);
+  });
+
   it("starts a fresh window once the old one has passed", async () => {
     for (let i = 0; i <= limit.max; i++) await hit();
     expect((await hit()).allowed).toBe(false);

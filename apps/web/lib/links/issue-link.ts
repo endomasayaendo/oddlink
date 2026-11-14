@@ -46,11 +46,15 @@ export async function issueShortUrl(
   }
   const originalUrl = parsed.data;
 
-  const limit = await rateLimit(clientIp).catch((error: unknown): RateLimitVerdict => {
+  // try/await rather than .catch(): a limiter that throws synchronously must fail open too.
+  let limit: RateLimitVerdict;
+  try {
+    limit = await rateLimit(clientIp);
+  } catch (error) {
     // Code only: the error could carry connection details, and the key must not be logged.
     console.warn("[rate-limit] check failed; allowing the request", { code: errorCode(error) ?? "unknown" });
-    return { allowed: true };
-  });
+    limit = { allowed: true };
+  }
   if (!limit.allowed) {
     return {
       ok: false,

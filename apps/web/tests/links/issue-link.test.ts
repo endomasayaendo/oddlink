@@ -217,6 +217,18 @@ describe("issueShortUrl", () => {
       warn.mockRestore();
     });
 
+    it("fails open when the limiter throws synchronously", async () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const result = await issueShortUrl("https://example.com", {
+        rateLimit: () => {
+          throw new Error("boom");
+        },
+      });
+      expect(result.ok).toBe(true);
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining("[rate-limit]"), { code: "unknown" });
+      warn.mockRestore();
+    });
+
     it("enforces the configured limit end to end", async () => {
       // vitest.config.mts sets ISSUE_RATE_LIMIT_MAX=1000; prefill the shared bucket to just below it.
       await db.insert(rateLimits).values({

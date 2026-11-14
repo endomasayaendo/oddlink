@@ -12,7 +12,8 @@ type Limit = { max: number; windowSeconds: number };
  *
  * A single upsert, so concurrent hits serialize on the row lock and exactly `max` get through.
  * Windows are aligned to the epoch using the database clock (`now()`), so app servers with skewed
- * clocks agree. The count is capped at max + 1 so a flood cannot overflow the column.
+ * clocks agree. The count is capped at max + 1 so a flood cannot overflow the column
+ * (LEAST before + 1, so even max = int4 max - 1 never computes int4 max + 1).
  *
  * `now()` is the transaction start time, so a hit that started just before a window boundary can
  * commit after one that started just after it. GREATEST keeps such a late hit from moving the
@@ -26,7 +27,7 @@ export async function consumeRateLimit(scope: string, key: string, { max, window
     ON CONFLICT (scope, key) DO UPDATE SET
       count = CASE
         WHEN rate_limits.window_start >= EXCLUDED.window_start
-          THEN LEAST(rate_limits.count + 1, ${max}::int + 1)
+          THEN LEAST(rate_limits.count, ${max}::int) + 1
         ELSE 1
       END,
       window_start = GREATEST(rate_limits.window_start, EXCLUDED.window_start)
@@ -39,7 +40,7 @@ export async function consumeRateLimit(scope: string, key: string, { max, window
 }
 
 /** Per-client limit on issuing links (API and form share it). */
-export function checkIssueRateLimit(clientIp: string | null): Promise<RateLimitVerdict> {
+export async function checkIssueRateLimit(clientIp: string | null): Promise<RateLimitVerdict> {
   const env = getEnv();
   return consumeRateLimit("issue", clientKey(clientIp, env.RATE_LIMIT_SECRET), {
     max: env.ISSUE_RATE_LIMIT_MAX,
