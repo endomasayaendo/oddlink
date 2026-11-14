@@ -7,8 +7,21 @@ vi.mock("@/lib/links/safe-browsing", () => ({ checkUrlSafety }));
 
 resetUrlTables();
 
-const post = (body?: string) =>
-  POST(new Request("http://localhost:3000/api/issue", { method: "POST", headers: { "content-type": "application/json" }, body }));
+const checkIssueRateLimit = vi.hoisted(() =>
+  vi.fn<(ip: string | null) => Promise<{ allowed: true } | { allowed: false; retryAfterSeconds: number }>>(async () => ({
+    allowed: true,
+  })),
+);
+vi.mock("@/lib/rate-limit", () => ({ checkIssueRateLimit }));
+
+const post = (body?: string, headers: Record<string, string> = {}) =>
+  POST(
+    new Request("http://localhost:3000/api/issue", {
+      method: "POST",
+      headers: { "content-type": "application/json", ...headers },
+      body,
+    }),
+  );
 
 describe("POST /api/issue", () => {
   it("returns the short URL as JSON", async () => {
@@ -57,5 +70,22 @@ describe("POST /api/issue", () => {
     checkUrlSafety.mockResolvedValueOnce("unknown");
     const res = await post(JSON.stringify({ originalUrl: "https://example.com" }));
     expect(res.status).toBe(200);
+  });
+
+  it("returns 429 with Retry-After and no Safe Browsing advisory when rate limited", async () => {
+    checkIssueRateLimit.mockResolvedValueOnce({ allowed: false, retryAfterSeconds: 37 });
+    const res = await post(JSON.stringify({ originalUrl: "https://example.com" }));
+    expect(res.status).toBe(429);
+    expect(res.headers.get("Retry-After")).toBe("37");
+    expect(await res.json()).toEqual({
+      message: "You're creating links too quickly. Please try again in a few minutes.",
+    });
+  });
+
+  it("keys the limit on the client address from the proxy headers", async () => {
+    await post(JSON.stringify({ originalUrl: "https://example.com" }), { "x-forwarded-for": "198.51.100.4, 10.0.0.1" });
+    expect(checkIssueRateLimit).toHaveBeenLastCalledWith("198.51.100.4");
+    await post(JSON.stringify({ originalUrl: "https://example.com" }));
+    expect(checkIssueRateLimit).toHaveBeenLastCalledWith(null);
   });
 });

@@ -19,6 +19,11 @@ export default defineConfig({
       APP_TIME_ZONE: "Asia/Tokyo",
       // Never call Google from tests, even if a developer's .env has a key; tests mock fetch.
       SAFE_BROWSING_API_KEY: "",
+      // Fixed so tests don't depend on a developer's .env. The limit is high enough that only the
+      // rate-limit tests (which pass their own) ever reach it.
+      RATE_LIMIT_SECRET: "test-only-rate-limit-secret-0123456789",
+      ISSUE_RATE_LIMIT_MAX: "1000",
+      ISSUE_RATE_LIMIT_WINDOW_SECONDS: "60",
     },
   },
 });

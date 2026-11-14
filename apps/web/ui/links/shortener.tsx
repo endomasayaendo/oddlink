@@ -39,7 +39,7 @@ export function Shortener() {
   }, null);
 
   const error = copyError || (state && !state.ok && state !== dismissed ? state.message : "");
-  const showAdvisory = !copyError && !!state && !state.ok && state !== dismissed && "reason" in state;
+  const showAdvisory = !copyError && !!state && !state.ok && state !== dismissed && state.reason === "unsafe_url";
 
   return (
     <>

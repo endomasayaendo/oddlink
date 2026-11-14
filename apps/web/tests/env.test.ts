@@ -4,7 +4,20 @@ import { parseEnv, resolveMode } from "@/lib/env";
 const PASSWORD = "s3cr3t-pa55";
 const validDb = `postgres://app:${PASSWORD}@db.example.com:5432/oddlink`;
 const SB_KEY = "AIzaSyTestSafeBrowsingKey-123";
-const runtimeEnv = { BASE_URL: "https://oddl.ink", DATABASE_URL: validDb, SAFE_BROWSING_API_KEY: SB_KEY };
+const RL_SECRET = "rl-secret-0123456789abcdef0123456789abcdef";
+const runtimeEnv = {
+  BASE_URL: "https://oddl.ink",
+  DATABASE_URL: validDb,
+  SAFE_BROWSING_API_KEY: SB_KEY,
+  RATE_LIMIT_SECRET: RL_SECRET,
+  ISSUE_RATE_LIMIT_MAX: "7",
+  ISSUE_RATE_LIMIT_WINDOW_SECONDS: "90",
+};
+const devRateLimit = {
+  RATE_LIMIT_SECRET: "dev-only-rate-limit-secret-do-not-use-in-production",
+  ISSUE_RATE_LIMIT_MAX: 100,
+  ISSUE_RATE_LIMIT_WINDOW_SECONDS: 60,
+};
 
 function messageOf(fn: () => unknown): string {
   try {
@@ -43,6 +56,9 @@ describe("required values", () => {
       DATABASE_URL: validDb,
       APP_TIME_ZONE: "Asia/Tokyo",
       SAFE_BROWSING_API_KEY: SB_KEY,
+      RATE_LIMIT_SECRET: RL_SECRET,
+      ISSUE_RATE_LIMIT_MAX: 7,
+      ISSUE_RATE_LIMIT_WINDOW_SECONDS: 90,
     });
   });
 
@@ -55,7 +71,7 @@ describe("required values", () => {
   });
 
   it("lists only the missing variable", () => {
-    const message = messageOf(() => parseEnv({ DATABASE_URL: validDb, SAFE_BROWSING_API_KEY: SB_KEY }, "runtime"));
+    const message = messageOf(() => parseEnv({ ...runtimeEnv, BASE_URL: undefined }, "runtime"));
     expect(message).toContain("- BASE_URL:");
     expect(message).not.toContain("- DATABASE_URL:");
     expect(message).not.toContain("- SAFE_BROWSING_API_KEY:");
@@ -81,6 +97,7 @@ describe("required values", () => {
       DATABASE_URL: undefined,
       APP_TIME_ZONE: "Asia/Tokyo",
       SAFE_BROWSING_API_KEY: undefined,
+      ...devRateLimit,
     });
   });
 
@@ -91,6 +108,7 @@ describe("required values", () => {
         DATABASE_URL: undefined,
         APP_TIME_ZONE: "Asia/Tokyo",
         SAFE_BROWSING_API_KEY: undefined,
+        ...devRateLimit,
       });
     }
   });
@@ -99,6 +117,47 @@ describe("required values", () => {
     expect(() => parseEnv({ BASE_URL: "not a url" }, "build")).toThrow("- BASE_URL:");
     expect(() => parseEnv({ DATABASE_URL: "mysql://x" }, "build")).toThrow("- DATABASE_URL:");
     expect(() => parseEnv({ APP_TIME_ZONE: "Mars/Olympus" }, "build")).toThrow("- APP_TIME_ZONE:");
+  });
+});
+
+describe("rate limit", () => {
+  const names = ["RATE_LIMIT_SECRET", "ISSUE_RATE_LIMIT_MAX", "ISSUE_RATE_LIMIT_WINDOW_SECONDS"] as const;
+
+  it("requires all three at runtime", () => {
+    for (const name of names) {
+      const message = messageOf(() => parseEnv({ ...runtimeEnv, [name]: undefined }, "runtime"));
+      expect(message).toContain(`- ${name}: is required in production (${name} is not set)`);
+      expect(messageOf(() => parseEnv({ ...runtimeEnv, [name]: "" }, "runtime"))).toContain(`- ${name}:`);
+    }
+  });
+
+  it("falls back to dev-only defaults in build and lenient modes", () => {
+    for (const mode of ["build", "lenient"] as const) {
+      expect(parseEnv({}, mode)).toMatchObject(devRateLimit);
+      expect(parseEnv({ ISSUE_RATE_LIMIT_MAX: "3" }, mode).ISSUE_RATE_LIMIT_MAX).toBe(3);
+    }
+  });
+
+  it.each(["0", "-1", "1.5", "1e3", "abc", " 5", "0x10", "2147483647", "99999999999"])(
+    "rejects %j as a limit or window",
+    (value) => {
+      for (const name of ["ISSUE_RATE_LIMIT_MAX", "ISSUE_RATE_LIMIT_WINDOW_SECONDS"] as const) {
+        for (const mode of ["runtime", "lenient"] as const) {
+          expect(() => parseEnv({ ...runtimeEnv, [name]: value }, mode)).toThrow(`- ${name}:`);
+        }
+      }
+    },
+  );
+
+  it("parses limits as integers", () => {
+    const env = parseEnv({ ...runtimeEnv, ISSUE_RATE_LIMIT_MAX: "1", ISSUE_RATE_LIMIT_WINDOW_SECONDS: "007" }, "runtime");
+    expect(env.ISSUE_RATE_LIMIT_MAX).toBe(1);
+    expect(env.ISSUE_RATE_LIMIT_WINDOW_SECONDS).toBe(7);
+  });
+
+  it("rejects a short or whitespace-containing secret", () => {
+    expect(() => parseEnv({ ...runtimeEnv, RATE_LIMIT_SECRET: "too-short" }, "runtime")).toThrow("at least 32");
+    expect(() => parseEnv({ ...runtimeEnv, RATE_LIMIT_SECRET: `${RL_SECRET} x` }, "runtime")).toThrow("whitespace");
   });
 });
 
@@ -190,5 +249,18 @@ describe("secret redaction", () => {
     }
     const message = messageOf(() => parseEnv({ ...runtimeEnv, BASE_URL: "ftp://x" }, "runtime"));
     expect(message).not.toContain(SB_KEY);
+  });
+
+  it("never echoes RATE_LIMIT_SECRET, valid or malformed", () => {
+    for (const mode of ["build", "runtime", "lenient"] as const) {
+      for (const bad of [`${RL_SECRET} with spaces`, RL_SECRET.slice(0, 20)]) {
+        const message = messageOf(() => parseEnv({ ...runtimeEnv, RATE_LIMIT_SECRET: bad }, mode));
+        expect(message).toContain("- RATE_LIMIT_SECRET:");
+        expect(message).not.toContain(bad);
+        expect(message).not.toContain(RL_SECRET.slice(0, 20));
+      }
+    }
+    const message = messageOf(() => parseEnv({ ...runtimeEnv, BASE_URL: "ftp://x" }, "runtime"));
+    expect(message).not.toContain(RL_SECRET);
   });
 });

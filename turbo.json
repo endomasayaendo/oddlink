@@ -4,13 +4,13 @@
     "build": {
       "dependsOn": ["^build"],
       "inputs": ["$TURBO_DEFAULT$", ".env*"],
-      "env": ["DATABASE_URL", "BASE_URL", "APP_TIME_ZONE", "SAFE_BROWSING_API_KEY"],
+      "env": ["DATABASE_URL", "BASE_URL", "APP_TIME_ZONE", "SAFE_BROWSING_API_KEY", "RATE_LIMIT_SECRET", "ISSUE_RATE_LIMIT_MAX", "ISSUE_RATE_LIMIT_WINDOW_SECONDS"],
       "outputs": [".next/**", "!.next/cache/**", "dist/**"]
     },
     "dev": {
       "cache": false,
       "persistent": true,
-      "passThroughEnv": ["DATABASE_URL", "BASE_URL", "APP_TIME_ZONE", "SAFE_BROWSING_API_KEY"]
+      "passThroughEnv": ["DATABASE_URL", "BASE_URL", "APP_TIME_ZONE", "SAFE_BROWSING_API_KEY", "RATE_LIMIT_SECRET", "ISSUE_RATE_LIMIT_MAX", "ISSUE_RATE_LIMIT_WINDOW_SECONDS"]
     },
     "lint": {
       "dependsOn": ["^lint"]

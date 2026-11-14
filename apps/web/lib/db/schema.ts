@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { bigint, bigserial, boolean, check, index, pgTable, text, timestamp, varchar } from "drizzle-orm/pg-core";
+import { bigint, bigserial, boolean, check, index, integer, pgTable, primaryKey, text, timestamp, varchar } from "drizzle-orm/pg-core";
 
 /** Column length of url_mappings.short_code; issuing regenerates phrases longer than this. */
 export const SHORT_CODE_MAX_LENGTH = 255;
@@ -49,3 +49,19 @@ export const adjectives = wordTable("adjectives");
 export const nouns = wordTable("nouns");
 export const verbs = wordTable("verbs");
 export const adverbs = wordTable("adverbs");
+
+/**
+ * Fixed-window rate-limit counters, one row per (scope, client key). `key` is an HMAC of the
+ * normalized client address (64 hex characters), never the address itself. See lib/rate-limit.
+ */
+export const rateLimits = pgTable(
+  "rate_limits",
+  {
+    scope: varchar({ length: 32 }).notNull(),
+    key: varchar({ length: 64 }).notNull(),
+    windowStart: timestamp("window_start", { withTimezone: true }).notNull(),
+    count: integer().notNull(),
+  },
+  // window_start is indexed so stale rows can be purged by age.
+  (t) => [primaryKey({ columns: [t.scope, t.key] }), index("idx_rate_limits_window_start").on(t.windowStart)],
+);

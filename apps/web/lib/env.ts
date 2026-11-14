@@ -14,12 +14,22 @@ export type Env = {
   APP_TIME_ZONE: string;
   /** Google Safe Browsing API key (secret). Only guaranteed to be present in `runtime` mode. */
   SAFE_BROWSING_API_KEY: string | undefined;
+  /** HMAC key for rate-limit client keys (secret). Falls back to a dev-only value outside `runtime`. */
+  RATE_LIMIT_SECRET: string;
+  /** Link issues allowed per client per window. */
+  ISSUE_RATE_LIMIT_MAX: number;
+  /** Length of the issue rate-limit window, in seconds. */
+  ISSUE_RATE_LIMIT_WINDOW_SECONDS: number;
 };
 
 type EnvSource = Record<string, string | undefined>;
 
 const DEFAULT_BASE_URL = "http://localhost:3000";
 const DEFAULT_TIME_ZONE = "Asia/Tokyo";
+// Dev and test only: production must set all three (the real thresholds live outside the repository).
+const DEV_RATE_LIMIT_SECRET = "dev-only-rate-limit-secret-do-not-use-in-production";
+const DEV_ISSUE_RATE_LIMIT_MAX = 100;
+const DEV_ISSUE_RATE_LIMIT_WINDOW_SECONDS = 60;
 
 /**
  * - `build`: `next build` (Next sets NEXT_PHASE during it, and build workers inherit it). CI builds
@@ -98,6 +108,26 @@ const timeZoneValue = z.string().refine(
 // Opaque secret: only checked for presence and shape, and never echoed in messages.
 const safeBrowsingKeyValue = z.string().regex(/^\S+$/, { error: "must not contain whitespace" });
 
+// Opaque secret like the one above; a short key would make the HMAC easy to brute-force.
+const rateLimitSecretValue = z
+  .string()
+  .regex(/^\S+$/, { error: "must not contain whitespace" })
+  .min(32, { error: "must be at least 32 characters" });
+
+// Postgres int4 bounds the stored count (max + 1) and keeps the window interval sane.
+const INT4_MAX = 2_147_483_647;
+const positiveIntValue = z
+  .string()
+  .regex(/^[0-9]+$/, { error: "must be a positive integer" })
+  .transform(Number)
+  .pipe(
+    z
+      .number()
+      .int()
+      .min(1, { error: "must be a positive integer" })
+      .max(INT4_MAX - 1, { error: "is too large" }),
+  );
+
 function buildSchema(mode: EnvMode) {
   const baseUrl =
     mode === "runtime" ? requiredWhen(mode, "BASE_URL").pipe(baseUrlValue) : baseUrlValue;
@@ -120,12 +150,31 @@ function buildSchema(mode: EnvMode) {
         ? requiredWhen(mode, "SAFE_BROWSING_API_KEY").pipe(safeBrowsingKeyValue)
         : safeBrowsingKeyValue.optional(),
     ),
+    RATE_LIMIT_SECRET: z.preprocess(
+      emptyAsUnset,
+      mode === "runtime"
+        ? requiredWhen(mode, "RATE_LIMIT_SECRET").pipe(rateLimitSecretValue)
+        : rateLimitSecretValue.default(DEV_RATE_LIMIT_SECRET),
+    ),
+    ISSUE_RATE_LIMIT_MAX: z.preprocess(
+      emptyAsUnset,
+      mode === "runtime"
+        ? requiredWhen(mode, "ISSUE_RATE_LIMIT_MAX").pipe(positiveIntValue)
+        : positiveIntValue.default(DEV_ISSUE_RATE_LIMIT_MAX),
+    ),
+    ISSUE_RATE_LIMIT_WINDOW_SECONDS: z.preprocess(
+      emptyAsUnset,
+      mode === "runtime"
+        ? requiredWhen(mode, "ISSUE_RATE_LIMIT_WINDOW_SECONDS").pipe(positiveIntValue)
+        : positiveIntValue.default(DEV_ISSUE_RATE_LIMIT_WINDOW_SECONDS),
+    ),
   });
 }
 
 /**
  * Validates the environment and throws one Error listing every problem. Messages are built from
- * issue paths and our own text only, never from the input values: DATABASE_URL holds a password and SAFE_BROWSING_API_KEY is a secret.
+ * issue paths and our own text only, never from the input values: DATABASE_URL holds a password, and
+ * SAFE_BROWSING_API_KEY and RATE_LIMIT_SECRET are secrets.
  */
 export function parseEnv(source: EnvSource, mode: EnvMode): Env {
   const result = buildSchema(mode).safeParse({
@@ -133,6 +182,9 @@ export function parseEnv(source: EnvSource, mode: EnvMode): Env {
     DATABASE_URL: source.DATABASE_URL,
     APP_TIME_ZONE: source.APP_TIME_ZONE,
     SAFE_BROWSING_API_KEY: source.SAFE_BROWSING_API_KEY,
+    RATE_LIMIT_SECRET: source.RATE_LIMIT_SECRET,
+    ISSUE_RATE_LIMIT_MAX: source.ISSUE_RATE_LIMIT_MAX,
+    ISSUE_RATE_LIMIT_WINDOW_SECONDS: source.ISSUE_RATE_LIMIT_WINDOW_SECONDS,
   });
   if (!result.success) {
     const lines = result.error.issues.map((issue) => `- ${issue.path.join(".")}: ${issue.message}`);

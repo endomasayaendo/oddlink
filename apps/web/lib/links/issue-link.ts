@@ -7,15 +7,23 @@ import { originalUrlSchema } from "@/lib/zod/schemas/links";
 import { getWords } from "./get-words";
 import { checkUrlSafety, type SafetyVerdict } from "./safe-browsing";
 import { UNSAFE_URL_MESSAGE } from "./safe-browsing/advisory";
+import { checkIssueRateLimit, type RateLimitVerdict } from "@/lib/rate-limit";
 
 const MAX_ATTEMPTS = 5;
 
+export const RATE_LIMITED_MESSAGE = "You're creating links too quickly. Please try again in a few minutes.";
+
 export type IssueResult =
   | { ok: true; shortCode: string; shortUrl: string; originalUrl: string }
-  | { ok: false; status: 400 | 503; message: string }
-  | { ok: false; status: 422; reason: "unsafe_url"; message: string };
+  | { ok: false; status: 400 | 503; reason?: never; message: string }
+  | { ok: false; status: 422; reason: "unsafe_url"; message: string }
+  | { ok: false; status: 429; reason: "rate_limited"; message: string; retryAfterSeconds: number };
 
 type Options = {
+  /** Normalized client address from lib/rate-limit/client-key; null shares the "unknown" bucket. */
+  clientIp?: string | null;
+  /** Per-client limit; a failing limiter lets the request through (fail open). */
+  rateLimit?: (clientIp: string | null) => Promise<RateLimitVerdict>;
   generate?: () => Promise<string>;
   /** Threat-list lookup; "unknown" (lookup failed or skipped) issues the link anyway. */
   checkUrl?: (url: string) => Promise<SafetyVerdict>;
@@ -24,18 +32,34 @@ type Options = {
 const defaultGenerate = async () => generatePhrase(await getWords());
 
 /**
- * Validates the URL, refuses ones Google Safe Browsing flags (failing open when it can't tell),
+ * Validates the URL, applies the per-client rate limit (invalid input is not counted; unsafe URLs are),
+ * refuses ones Google Safe Browsing flags (failing open when it can't tell),
  * and stores it under a fresh phrase, regenerating on collisions and on phrases too long for the short_code column. Both share MAX_ATTEMPTS.
  */
 export async function issueShortUrl(
   input: unknown,
-  { generate = defaultGenerate, checkUrl = checkUrlSafety }: Options = {},
+  { clientIp = null, rateLimit = checkIssueRateLimit, generate = defaultGenerate, checkUrl = checkUrlSafety }: Options = {},
 ): Promise<IssueResult> {
   const parsed = originalUrlSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, status: 400, message: parsed.error.issues[0].message };
   }
   const originalUrl = parsed.data;
+
+  const limit = await rateLimit(clientIp).catch((error: unknown): RateLimitVerdict => {
+    // Code only: the error could carry connection details, and the key must not be logged.
+    console.warn("[rate-limit] check failed; allowing the request", { code: errorCode(error) ?? "unknown" });
+    return { allowed: true };
+  });
+  if (!limit.allowed) {
+    return {
+      ok: false,
+      status: 429,
+      reason: "rate_limited",
+      message: RATE_LIMITED_MESSAGE,
+      retryAfterSeconds: limit.retryAfterSeconds,
+    };
+  }
 
   const verdict = await checkUrl(originalUrl).catch(() => "unknown" as const);
   if (verdict === "unsafe") {
@@ -74,7 +98,12 @@ export async function issueShortUrl(
 }
 
 // Drizzle wraps driver errors, so the Postgres code may sit on `cause`.
+function errorCode(error: unknown): string | undefined {
+  const code = (e: unknown) => (e as { code?: unknown } | undefined)?.code;
+  const value = code(error) ?? code((error as { cause?: unknown } | undefined)?.cause);
+  return typeof value === "string" ? value : undefined;
+}
+
 function isUniqueViolation(error: unknown): boolean {
-  const code = (e: unknown) => (e as { code?: string } | undefined)?.code;
-  return code(error) === "23505" || code((error as { cause?: unknown })?.cause) === "23505";
+  return errorCode(error) === "23505";
 }
