@@ -1,7 +1,7 @@
 # 0002. Link lifecycle and control (disable, delete, and who may do it)
 
-- Status: Proposed (the owner decides; this document goes only as far as a recommendation)
-- Date: 2026-11-11 (revised the same day after the PO decision on #47)
+- Status: Accepted (2026-11-14, PO decisions on PR #59)
+- Date: 2026-11-11 (revised the same day after the PO decision on #47; accepted 2026-11-14)
 - Related: #34 (operator disable), #47 (creator control; re-scoped), #50 (threat-list checks), #48 (crawler cards), #35 (retention), #33 (rate limiting), #31 (real 404), #46 / PR #56 (`+` preview), ADR 0003 (optional accounts)
 
 ## Context
@@ -36,7 +36,7 @@ For comparison (research checked by the lead on 2026-11-10): Bitly, Dub and Shor
 - M6. Anonymous links have no owner and no management path other than the operator. There is no "claim" (see ADR 0003).
 
 **should**
-- S1. A logged-in owner can delete their own links, and possibly disable and re-enable them (ADR 0003, PO decision below).
+- S1. A logged-in owner can delete, disable and re-enable their own links (ADR 0003; PO decision 2026-11-14).
 - S2. The data model needs only additive changes when ownership arrives.
 - S3. Disabling is reversible. Deleting is not.
 - S4. Small enough for one person to build and run.
@@ -45,10 +45,10 @@ For comparison (research checked by the lead on 2026-11-10): Bitly, Dub and Shor
 
 | | Active | Expired | **Disabled** | **Deleted** |
 |---|---|---|---|---|
-| Redirect | 302 | 404 (as #31) | **410 or 404** (PO), no count, no log | **410 or 404** (PO) |
+| Redirect | 302 | 404 (as #31) | **410**, no count, no log | **410** |
 | Analytics page | full | full | state banner; destination hidden unless disabled by the owner | gone page, no data |
 | `+` preview | full | "expired" | gone page, no destination | gone page |
-| `access_log` | kept | kept (until #35) | kept (evidence, re-enable) | **removed**, count reset to 0 (recommended; PO) |
+| `access_log` | kept | kept (until #35) | kept (evidence, re-enable) | **removed**, count reset to 0 |
 | `original_url` | kept | kept | kept | **set to NULL** |
 | Phrase | reserved | reserved | reserved | **reserved forever (tombstone)** |
 | Reversible | | | yes, by whoever may act on that reason | no |
@@ -125,18 +125,25 @@ A random token returned at issue time and kept in `localStorage`. Rejected becau
 
 ### (c) Owner management for logged-in users
 
-Links issued while logged in get `owner_id`. The owner sees them on every device and can delete them (and, if the PO agrees, disable and re-enable). Anonymous links are unaffected and stay operator-only. Authentication, sessions and personal data are designed in ADR 0003.
+Links issued while logged in get `owner_id`. The owner sees them on every device and can delete, disable and re-enable them. Anonymous links are unaffected and stay operator-only. Authentication, sessions and personal data are designed in ADR 0003.
 
 - UX: issuing does not change for anyone. Logged-in users get a "my links" page.
 - Effort: M on top of ADR 0003's auth work.
 - Risks: management endpoints are new abuse surface (#33); every mutation must check ownership in the same statement (IDOR).
 
-## Decision (proposed)
+## Decision
 
 **Phase 1 = (a) now. Phase 2 = (c), after ADR 0003 is accepted.**
 
+### PO decisions, 2026-11-14 (PR #59)
+
+- Build in phases as proposed.
+- Disabled and deleted links answer **410 Gone**.
+- Owners get **delete, disable and re-enable** (re-enable only for their own disables, M5).
+- Deleting a link **removes its `access_log` rows** and resets its count to 0.
+
 1. **Phase 1 (build first): link states + operator control + reporting.** The migration, `link-state.ts`, `link-control.ts`, the operator CLI, the HTTP handling below, the abuse mailbox, and a one-line note on the home page that links issued without login cannot be changed or deleted later. This closes #34, meets M2–M6, and together with #50 unblocks #48. It changes no issuing UX and does not depend on ADR 0003.
-2. **Phase 2: owner management.** Add `owner_id`; issue sets it when a session is present; owners list and manage their links through `link-control.ts` with `{ actor: "owner", userId }`. An owner can re-enable only a disable that has `disabled_by = 'owner'` (M5). Depends on ADR 0003.
+2. **Phase 2: owner management.** Add `owner_id`; issue sets it when a session is present; owners list their links and delete, disable or re-enable them through `link-control.ts` with `{ actor: "owner", userId }`. An owner can re-enable only a disable that has `disabled_by = 'owner'` (M5). Depends on ADR 0003.
 
 Runner-up: stop after Phase 1 (pure is.gd model with operator disabling). Switch to it if ADR 0003 is rejected or deferred; nothing in Phase 1 has to be undone.
 
@@ -147,7 +154,7 @@ A dedicated reporting email address, linked from the footer, from the preview pa
 ## HTTP behaviour
 
 - Unknown and expired: unchanged from #31 (404, rewritten static page, `NOT_FOUND_CACHE_CONTROL`). Whether expired should become 410 is left to #35.
-- Disabled and deleted: **open for the PO — 410 Gone or 404.** Recommended: 410, from a static page rewritten under the requested URL, with the same no-store `Cache-Control` (a disable can be undone) and `X-Robots-Tag: noindex`. 410 tells link checkers and crawlers that the link existed and was removed on purpose, so they drop it. The argument for 404: it reveals nothing beyond "not here", and keeps one code path. Either way the page says "This link was disabled" or "deleted". For `operator` and `automated` it adds a generic "because it was reported or flagged as unsafe", which warns the person who clicked without exposing how links are detected.
+- Disabled and deleted: **410 Gone** (PO decision 2026-11-14), from a static page rewritten under the requested URL, with the same no-store `Cache-Control` (a disable can be undone) and `X-Robots-Tag: noindex`. 410 tells link checkers and crawlers that the link existed and was removed on purpose, so they drop it. 404 was considered (it reveals nothing beyond "not here" and keeps one code path) and rejected. The page says "This link was disabled" or "deleted". For `operator` and `automated` it adds a generic "because it was reported or flagged as unsafe", which warns the person who clicked without exposing how links are detected.
 - Redirect (302) responses must not be stored by shared caches, so that a disable takes effect immediately. Verify this on the deploy target from ADR 0001.
 - Analytics and preview never show the destination of a link disabled by `operator` or `automated`, because both pages are public to anyone who knows the code. (Whether analytics of owned links become private is an ADR 0003 question.)
 
@@ -162,10 +169,10 @@ A dedicated reporting email address, linked from the footer, from the preview pa
 - `original_url` becomes nullable, and the type change spreads to readers. The state helper keeps that contained.
 - Existing links and every link issued without login can only be controlled by the operator. The home page must say this, so nobody expects a delete button later.
 
-Follow-up issues to create (after this ADR is Accepted)
+Follow-up issues to create
 1. Link states: migration, `link-state.ts`, `link-control.ts`, tests per state.
 2. Operator CLI for disable/enable/delete.
-3. Gone handling (410 or 404 per the PO) for redirect, analytics and preview.
+3. Gone handling (410) for redirect, analytics and preview.
 4. Abuse reporting address, "Report this link" entry points, and the "anonymous links can't be changed later" note on the home page.
 5. Re-scope #47 to Phase 2 owner management (blocked on ADR 0003).
 6. Update #35 to require tombstones.
@@ -173,11 +180,8 @@ Follow-up issues to create (after this ADR is Accepted)
 
 ## Open questions / risks
 
-- **For the owner to decide:**
-  - 410 or 404 for disabled and deleted links (recommended: 410).
-  - Whether owners get disable/enable as well as delete, or only delete (recommended: both; disable is the safe, reversible choice when someone is unsure).
-  - Whether deleting removes the link's `access_log` rows (recommended) or keeps aggregate counts.
-  - Japanese legal obligations for takedowns and log retention (**Unverified**; must be checked before public launch).
+- Japanese legal obligations for takedowns and log retention (**Unverified**; must be checked before public launch).
+- The abuse reporting address is chosen when follow-up issue 4 is built.
 - Whether redirects and the gone page are cached anywhere on the chosen platform (verify on deploy).
 - A tombstone still reveals that a phrase once existed. This is judged acceptable.
 - Users who expected to delete an anonymous link will have no self-service path. The home page note and the report address are the mitigation.
