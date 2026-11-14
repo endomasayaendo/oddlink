@@ -1,7 +1,7 @@
 # 0003. Optional accounts and link ownership
 
-- Status: Proposed (the owner decides; this document goes only as far as a recommendation)
-- Date: 2026-11-11
+- Status: Accepted (2026-11-14, PO decisions on PR #66)
+- Date: 2026-11-11 (accepted 2026-11-14)
 - Related: ADR 0001 (Vercel Hobby `hnd1` + Supabase Tokyo), ADR 0002 (link lifecycle; Phase 2 depends on this ADR), #47 (owner control), #33 (rate limiting), #64 (preview environments), #35 (retention)
 
 ## Context
@@ -78,13 +78,23 @@ Facts checked on 2026-11-11 unless marked Unverified.
 - **Email magic link / one-time code**: works for everyone but needs a sending provider, a sending domain (SPF/DKIM), bounce handling and abuse limits. For scale, Resend's free plan is 3,000 emails/month and 100/day [10]. It also makes our login form a tool for mailing strangers, so it needs rate limiting (#33) first.
 - **Passkeys**: best UX once enrolled, but a passkey is normally added to an existing account, not the first login. Later.
 
-**Recommended first set: GitHub + Google.** No email infrastructure, no passwords, and enough coverage. Email codes come later if users ask; passkeys after that.
+**First set (PO, 2026-11-14): GitHub + Google.** No email infrastructure, no passwords, and enough coverage. Email codes come later if users ask; passkeys after that.
 
 No automatic account linking across providers in the first version: logging in with Google and later with GitHub creates two accounts. Linking by email is convenient but trusts each provider's email verification; it can be added deliberately later.
 
-## Decision (proposed)
+## Decision
 
 **Better Auth (A) with GitHub and Google OAuth, database sessions in our Postgres.**
+
+### PO decisions, 2026-11-14 (PR #66)
+
+- Auth: **Better Auth**.
+- First login methods: **GitHub and Google**.
+- Analytics of owned links: **P2**, private to the owner. Anonymous links stay public.
+- Account deletion: **tombstone the owned links**.
+- API keys: **a later phase**.
+- Login launches **after #33 rate limiting** is in place.
+- Obligations under Japan's Act on the Protection of Personal Information: the PO is checking them; login does not launch until that is settled.
 
 Why: it keeps users next to links in one database under Drizzle (S1), changes nothing about local development or CI (M6), costs nothing, and is the maintained path of the Auth.js ecosystem. Database sessions can be revoked immediately (account deletion, logout everywhere), which JWTs cannot without extra machinery.
 
@@ -109,14 +119,14 @@ Better Auth's tables (`user`, `session`, `account`, `verification`) are generate
 2. Set `owner_id = NULL` on those tombstones.
 3. Delete the user, sessions and accounts.
 
-Alternative for the PO: keep owned links working and turn them anonymous instead. Shared links keep redirecting, but nobody but the operator can stop them afterwards, which is the opposite of what the user asked for when they deleted their account. Not recommended.
+Alternative considered and rejected by the PO: keep owned links working and turn them anonymous instead. Shared links keep redirecting, but nobody but the operator can stop them afterwards, which is the opposite of what the user asked for when they deleted their account.
 
 ADR 0002's Phase 2 check constraint should therefore forbid only `disabled_by = 'owner'` on an anonymous row; a tombstone with `deleted_by = 'owner'` and no owner is valid after account deletion. A disabled-by-owner link must be re-enabled or deleted before its owner disappears, which step 1 guarantees.
 
 ## What logged-in users get
 
 1. `/links`: their links on any device, newest first, with state (active, expired, disabled, deleted) and click count. The `localStorage` history stays for anonymous visitors.
-2. Delete, and disable/re-enable if the PO chooses it in ADR 0002, through `link-control.ts` with `{ actor: "owner", userId }`. An operator or automated disable shows as such and cannot be undone by the owner.
+2. Delete, disable and re-enable (ADR 0002), through `link-control.ts` with `{ actor: "owner", userId }`. An operator or automated disable shows as such and cannot be undone by the owner.
 3. Analytics for their links (see below).
 4. Not in scope: editing the destination (bait-and-switch, ADR 0002), custom phrases, custom expiry, workspaces or teams.
 
@@ -128,13 +138,13 @@ Today every analytics page is public to anyone who knows the code, by design. Op
 - **P2. Owned links are private to the owner; anonymous links stay public.** A real reason to log in, and closer to what users expect from an account. Two behaviours on one URL: non-owners get a "private" page (no counts, no destination). The `+` preview stays public for all links, because it is the safety feature.
 - **P3. Owner chooses per link** (default private or public). Most flexible; one more setting, one more column.
 
-Recommendation: **P2** now, P3 only if people ask to share stats. It costs a session read on `/analytics/{code}` for owned links only, which is off the redirect path.
+Decision: **P2** (PO, 2026-11-14). P3 only if people ask to share stats. It costs a session read on `/analytics/{code}` for owned links only, which is off the redirect path.
 
 ## API
 
 `POST /api/issue` stays anonymous and **does not accept the session cookie** for ownership. Cookie-authenticated route handlers do not get the Server Action Origin check [11], so letting cookies create owned links would open a CSRF path for little gain.
 
-Per-user API keys (random, shown once, stored as a SHA-256 hash with a short visible prefix, revocable, `Authorization: Bearer`) would let scripts issue owned links. Recommended for a **later phase**, after owner management has real users; the hashing pattern is cheap to build, but it adds key management UI and another thing for #33 to limit.
+Per-user API keys (random, shown once, stored as a SHA-256 hash with a short visible prefix, revocable, `Authorization: Bearer`) would let scripts issue owned links. Decided for a **later phase** (PO, 2026-11-14), after owner management has real users; the hashing pattern is cheap to build, but it adds key management UI and another thing for #33 to limit.
 
 ## Claiming anonymous links
 
@@ -178,16 +188,9 @@ Follow-up issues (after acceptance)
 
 ## Open questions / risks
 
-- **For the owner to decide:**
-  - Better Auth (recommended) or Supabase Auth.
-  - First login methods: GitHub + Google (recommended), or GitHub only.
-  - Analytics of owned links: P1 public, P2 private (recommended), or P3 per link.
-  - On account deletion: tombstone owned links (recommended) or turn them anonymous.
-  - API keys: later phase (recommended) or with Phase 2.
-  - Whether to launch login only after #33 rate limiting is in place (recommended).
 - Separate accounts per provider may confuse users who log in with a different provider.
 - Better Auth configuration details marked Unverified above.
-- Personal-data law in Japan (Unverified).
+- Personal-data law in Japan (Unverified; the PO is checking it, and login waits for the result).
 
 ## Sources (checked 2026-11-11)
 
