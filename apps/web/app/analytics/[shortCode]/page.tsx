@@ -61,7 +61,9 @@ async function AnalyticsContent({ params }: Pick<PageProps<"/analytics/[shortCod
         <StatCard label="Expires" value={formatDate(data.expiresAt)} />
       </div>
 
-      <div className="mb-8 rounded-wobble border-2 border-ink bg-paper-light p-4 sm:p-6">
+      {/* A-1's odd touch here: every other offset shadow falls down and to the right; this one
+          is cast up and to the left, toward a light that isn't there. */}
+      <div className="mb-8 rounded-wobble border-2 border-ink bg-paper-light p-4 shadow-[-4px_-4px_0_var(--color-ink-strong)] sm:p-6">
         <p className="mb-4 font-display font-semibold text-ink">Daily Clicks</p>
         {chartData.length > 0 ? (
           <LineChart data={chartData} xKey="date" yKey="count" />
