@@ -46,3 +46,4 @@ The goal is to make it possible to trace later not only "what was chosen" but al
 | [0001](0001-deploy-target.md) | Deploy target (hosting and Postgres) | Accepted |
 | [0002](0002-link-lifecycle-and-control.md) | Link lifecycle and control (disable, delete, who may do it) | Accepted |
 | [0003](0003-optional-accounts.md) | Optional accounts and link ownership | Accepted |
+| [0004](0004-rate-limiting.md) | Rate limiting for link issuance | Accepted |

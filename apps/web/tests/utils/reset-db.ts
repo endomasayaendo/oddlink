@@ -4,6 +4,6 @@ import { db } from "@/lib/db";
 
 export function resetUrlTables() {
   beforeEach(async () => {
-    await db.execute(sql`TRUNCATE url_mappings, access_log RESTART IDENTITY CASCADE`);
+    await db.execute(sql`TRUNCATE url_mappings, access_log, rate_limits RESTART IDENTITY CASCADE`);
   });
 }

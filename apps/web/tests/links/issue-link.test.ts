@@ -1,9 +1,10 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { generatePhrase, PATTERN_COUNT, type WordLists } from "@oddlink/utils";
 import { db } from "@/lib/db";
-import { SHORT_CODE_MAX_LENGTH, urlMappings } from "@/lib/db/schema";
+import { rateLimits, SHORT_CODE_MAX_LENGTH, urlMappings } from "@/lib/db/schema";
 import { issueShortUrl } from "@/lib/links/issue-link";
+import { clientKey } from "@/lib/rate-limit/client-key";
 import { resetUrlTables } from "../utils/reset-db";
 
 resetUrlTables();
@@ -159,5 +160,88 @@ describe("issueShortUrl", () => {
     const checkUrl = vi.fn(async () => "safe" as const);
     expect(await issueShortUrl("javascript:alert(1)", { checkUrl })).toMatchObject({ ok: false, status: 400 });
     expect(checkUrl).not.toHaveBeenCalled();
+  });
+
+  describe("rate limit", () => {
+    const rejected = async () => ({ allowed: false as const, retryAfterSeconds: 42 });
+
+    it("refuses with 429 before checking or inserting when the client is over the limit", async () => {
+      const checkUrl = vi.fn(async () => "safe" as const);
+      const generate = vi.fn(async () => "never-used");
+      const rateLimit = vi.fn(rejected);
+      const result = await issueShortUrl("https://example.com", { clientIp: "192.0.2.1", rateLimit, checkUrl, generate });
+      expect(result).toEqual({
+        ok: false,
+        status: 429,
+        reason: "rate_limited",
+        message: "You're creating links too quickly. Please try again in a few minutes.",
+        retryAfterSeconds: 42,
+      });
+      expect(rateLimit).toHaveBeenCalledWith("192.0.2.1");
+      expect(checkUrl).not.toHaveBeenCalled();
+      expect(generate).not.toHaveBeenCalled();
+      expect(await db.$count(urlMappings)).toBe(0);
+    });
+
+    it("does not count invalid input", async () => {
+      const rateLimit = vi.fn(rejected);
+      expect(await issueShortUrl("not-a-url", { rateLimit })).toMatchObject({ ok: false, status: 400 });
+      expect(rateLimit).not.toHaveBeenCalled();
+    });
+
+    it("counts URLs that Safe Browsing then refuses", async () => {
+      const rateLimit = vi.fn(async () => ({ allowed: true as const }));
+      const result = await issueShortUrl("https://phish.example", { rateLimit, checkUrl: async () => "unsafe" });
+      expect(result).toMatchObject({ status: 422 });
+      expect(rateLimit).toHaveBeenCalledTimes(1);
+    });
+
+    it("uses the shared bucket when no client address is given", async () => {
+      const rateLimit = vi.fn(async () => ({ allowed: true as const }));
+      await issueShortUrl("https://example.com", { rateLimit });
+      expect(rateLimit).toHaveBeenCalledWith(null);
+    });
+
+    it("issues the link and logs only an error code when the limiter fails (fail open)", async () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const error = Object.assign(new Error("connect ECONNREFUSED 10.0.0.5:5432"), { code: "ECONNREFUSED" });
+      const result = await issueShortUrl("https://example.com", {
+        clientIp: "192.0.2.1",
+        rateLimit: () => Promise.reject(error),
+      });
+      expect(result.ok).toBe(true);
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining("[rate-limit]"), { code: "ECONNREFUSED" });
+      const output = JSON.stringify(warn.mock.calls);
+      expect(output).not.toContain("192.0.2.1");
+      expect(output).not.toContain("10.0.0.5");
+      warn.mockRestore();
+    });
+
+    it("fails open when the limiter throws synchronously", async () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const result = await issueShortUrl("https://example.com", {
+        rateLimit: () => {
+          throw new Error("boom");
+        },
+      });
+      expect(result.ok).toBe(true);
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining("[rate-limit]"), { code: "unknown" });
+      warn.mockRestore();
+    });
+
+    it("enforces the configured limit end to end", async () => {
+      // vitest.config.mts sets ISSUE_RATE_LIMIT_MAX=1000; prefill the shared bucket to just below it.
+      await db.insert(rateLimits).values({
+        scope: "issue",
+        key: clientKey("192.0.2.9", process.env.RATE_LIMIT_SECRET!),
+        windowStart: sql`date_bin(interval '60 seconds', now(), timestamptz 'epoch')`,
+        count: 999,
+      });
+      const checkUrl = vi.fn(async () => "safe" as const);
+      expect(await issueShortUrl("https://example.com", { clientIp: "192.0.2.9", checkUrl })).toMatchObject({ ok: true });
+      expect(await issueShortUrl("https://example.com", { clientIp: "192.0.2.9", checkUrl })).toMatchObject({ status: 429 });
+      expect(checkUrl).toHaveBeenCalledTimes(1);
+      expect(await issueShortUrl("https://example.com", { clientIp: "192.0.2.10", checkUrl })).toMatchObject({ ok: true });
+    });
   });
 });

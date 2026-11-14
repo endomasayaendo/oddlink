@@ -103,13 +103,22 @@ curl -X POST http://localhost:3000/api/issue \
 }
 ```
 
-Errors return `{"message": "..."}`: `400` for a blank or invalid URL (only `http`/`https` are accepted), `422` if Google Safe Browsing flags the URL (the body also carries `"advisory": "Advisory provided by Google"` and `"advisoryUrl"`), `503` if no unique phrase could be generated.
+Errors return `{"message": "..."}`: `400` for a blank or invalid URL (only `http`/`https` are accepted), `422` if Google Safe Browsing flags the URL (the body also carries `"advisory": "Advisory provided by Google"` and `"advisoryUrl"`), `429` with a `Retry-After` header (seconds) when the client has issued too many links recently (see [Rate limiting](#rate-limiting)), `503` if no unique phrase could be generated.
 
 ### Safe Browsing check
 
 Before issuing, the destination is looked up in [Google Safe Browsing v5](https://developers.google.com/safe-browsing/reference) in [No-Storage Real-Time mode](https://developers.google.com/safe-browsing/reference/No.Storage.Real.Time.Mode): only 4-byte SHA-256 hash prefixes of the URL's host/path expressions are sent, never the URL itself (`apps/web/lib/links/safe-browsing/`). Matches for malware, social engineering, unwanted software and potentially harmful applications are refused. Answers are cached in memory per prefix (at most 30 minutes). If Google is slow (> 1 s), down, rate-limits us, or no key is set, the link is issued anyway (fail open).
 
 Setting up the key: create an API key in the Google Cloud console with the Safe Browsing API enabled, **restrict the key to the Safe Browsing API**, and set `SAFE_BROWSING_API_KEY` for every environment that runs `next start` — on Vercel that includes Preview deployments, not just Production. The Safe Browsing API is for non-commercial use; a commercial OddLink would move to Web Risk.
+
+### Rate limiting
+
+Issuing links is rate-limited in two layers ([ADR 0004](docs/adr/0004-rate-limiting.md)):
+
+1. **Vercel WAF** (deploy-time, coarse): a rate-limit rule keyed by IP on `POST /api/issue` and on Server Action POSTs to `/` (requests carrying a `Next-Action` header). Thresholds are set only in the Vercel dashboard. How many rules the Hobby plan allows is Unverified.
+2. **App limiter** (final check, `apps/web/lib/rate-limit/`): a per-client fixed window counted in Postgres (`rate_limits`), shared by the form and the API. Invalid URLs are not counted; URLs Safe Browsing refuses are. Over the limit, the API answers `429` with `Retry-After` and the form shows a message. If the limiter's database query fails, the link is issued anyway (fail open). Thresholds come from `ISSUE_RATE_LIMIT_MAX` / `ISSUE_RATE_LIMIT_WINDOW_SECONDS`. Like `SAFE_BROWSING_API_KEY`, these and `RATE_LIMIT_SECRET` must be set for every environment that runs `next start` (on Vercel, Preview as well as Production), or the server refuses to start.
+
+The client is identified by `x-real-ip`, else the first `x-forwarded-for` entry (IPv6 grouped by /64), stored only as an HMAC with `RATE_LIMIT_SECRET`, never as a raw address. This relies on the proxy in front overwriting those headers, as Vercel's edge does; a self-hosted deployment must put a reverse proxy in front that overwrites `X-Forwarded-For` / `X-Real-IP`.
 
 Links expire one year after they are issued.
 
@@ -140,6 +149,7 @@ oddlink/
 │       ├── lib/
 │       │   ├── middleware/           redirect / preview / analytics handling used by proxy.ts
 │       │   ├── links/                issuing, resolving and counting links
+│       │   ├── rate-limit/           per-client rate limit (Postgres counter, HMAC client keys)
 │       │   ├── analytics/            analytics queries
 │       │   ├── actions/              Server Actions
 │       │   ├── zod/schemas/          request validation
@@ -186,8 +196,11 @@ Set in `apps/web/.env`, or in the shell (`turbo.json` passes these through to th
 | `DATABASE_URL` | — | In production | Postgres connection string (`postgres://` or `postgresql://`) |
 | `BASE_URL` | `http://localhost:3000` | In production | Absolute `http`/`https` URL used in generated short links; no credentials, query or fragment; trailing slashes are removed |
 | `SAFE_BROWSING_API_KEY` | — | In production | Google Safe Browsing API key used to refuse phishing/malware URLs when issuing. Without it (dev, tests) the check is skipped with one warning |
+| `RATE_LIMIT_SECRET` | dev-only value | In production | Secret (32+ characters, e.g. `openssl rand -hex 32`) used to HMAC client addresses for rate limiting |
+| `ISSUE_RATE_LIMIT_MAX` | dev-only value | In production | Links one client may issue per window (positive integer) |
+| `ISSUE_RATE_LIMIT_WINDOW_SECONDS` | dev-only value | In production | Rate-limit window length in seconds (positive integer) |
 | `APP_TIME_ZONE` | `Asia/Tokyo` | No | IANA time zone name (e.g. `Asia/Tokyo`, `UTC`) for daily click counts and dates; offsets like `+09:00` are rejected |
 | `TEST_DATABASE_URL` | — | For `pnpm test` | Database used by the tests (not read by the app) |
 | `DB_NAME` / `DB_USERNAME` / `DB_PASSWORD` | `oddlink` / `postgres` / `postgres` | No | Used by `apps/web/docker-compose.yml` |
 
-The app validates these at startup (`apps/web/lib/env.ts`). In production (`next start`), a missing `BASE_URL`, `DATABASE_URL` or `SAFE_BROWSING_API_KEY`, or any malformed value, prints every problem and exits. In development and tests, missing values fall back to the defaults. `next build` needs none of them.
+The app validates these at startup (`apps/web/lib/env.ts`). In production (`next start`), a missing `BASE_URL`, `DATABASE_URL`, `SAFE_BROWSING_API_KEY`, `RATE_LIMIT_SECRET`, `ISSUE_RATE_LIMIT_MAX` or `ISSUE_RATE_LIMIT_WINDOW_SECONDS`, or any malformed value, prints every problem and exits. In development and tests, missing values fall back to the defaults. `next build` needs none of them.
