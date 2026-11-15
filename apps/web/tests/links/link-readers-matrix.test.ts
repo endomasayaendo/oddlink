@@ -1,16 +1,18 @@
 import { eq, sql, type SQL } from "drizzle-orm";
 import { NextRequest } from "next/server";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getAnalytics } from "@/lib/analytics/get-analytics";
 import { db } from "@/lib/db";
 import { accessLog, urlMappings } from "@/lib/db/schema";
 import { getLinkPreview } from "@/lib/links/get-link-preview";
 import { getLinkState, type LinkActor } from "@/lib/links/link-state";
 import { resolveShortCode } from "@/lib/links/resolve-link";
-import { rewriteGone } from "@/lib/middleware/utils/rewrite-gone";
-import { NOT_FOUND_CACHE_CONTROL } from "@/lib/middleware/utils/rewrite-not-found";
+import { type GoneVariant } from "@/lib/links/gone";
+import { serveGone } from "@/lib/middleware/utils/serve-gone";
+import { NO_STORE_CACHE_CONTROL, NOT_FOUND_CACHE_CONTROL } from "@/lib/middleware/utils/rewrite-not-found";
 import { proxy } from "@/proxy";
 import { resetUrlTables } from "../utils/reset-db";
+import { stubGonePages } from "../utils/stub-gone-page";
 
 /**
  * Every reader of url_mappings against one row in every state. A new reader goes
@@ -18,15 +20,17 @@ import { resetUrlTables } from "../utils/reset-db";
  * `expected`, so forgetting a cell is a type error.
  */
 
-vi.mock(import("@/lib/middleware/utils/rewrite-gone"), async (importOriginal) => {
+vi.mock(import("@/lib/middleware/utils/serve-gone"), async (importOriginal) => {
   const original = await importOriginal();
-  return { ...original, rewriteGone: vi.fn(original.rewriteGone) };
+  return { ...original, serveGone: vi.fn(original.serveGone) };
 });
 
 resetUrlTables();
 beforeEach(() => {
-  vi.mocked(rewriteGone).mockClear();
+  vi.mocked(serveGone).mockClear();
+  stubGonePages();
 });
+afterEach(() => vi.restoreAllMocks());
 
 const CODE = "matrix-code";
 const DESTINATION = "https://destination.example/secret-path";
@@ -58,7 +62,7 @@ type Reader =
   | "getAnalytics"
   | "getLinkPreview";
 
-// Proxy outcomes: "gone" means rewriteGone answered.
+// Proxy outcomes: "gone" means serveGone answered with the 410 gone page.
 type Outcome = "hit" | "miss" | "redirect" | "not-found" | "preview" | "pass" | "gone" | "active" | "expired" | "disabled" | "deleted";
 
 const live = (a: Outcome, b: Outcome, gone: Outcome) =>
@@ -85,7 +89,12 @@ const expected: Record<Reader, Record<Fixture, Outcome>> = {
   "proxy /c": live("redirect", "not-found", "gone"),
   "proxy /c+": live("preview", "preview", "gone"),
   "proxy /preview/c": live("pass", "pass", "gone"),
-  "proxy /analytics/c": live("pass", "pass", "gone"),
+  // A disabled link keeps its analytics page (with a banner); only a tombstone is gone.
+  "proxy /analytics/c": {
+    ...live("pass", "pass", "pass"),
+    "deleted-operator": "gone",
+    "deleted-owner": "gone",
+  },
   getLinkState: byState,
   getAnalytics: byState,
   getLinkPreview: byState,
@@ -95,10 +104,12 @@ async function viaProxy(path: string, notFoundPage: string): Promise<{ outcome: 
   const res = await proxy(new NextRequest(`http://localhost:3000${path}`));
   const rewrite = res.headers.get("x-middleware-rewrite");
   const seen = JSON.stringify([...res.headers]) + (await res.text());
-  if (vi.mocked(rewriteGone).mock.calls.length > 0) {
-    // No visible change yet: a gone link looks exactly like an unknown one.
-    expect(rewrite).toBe(`http://localhost:3000${notFoundPage}`);
-    expect(res.headers.get("cache-control")).toBe(NOT_FOUND_CACHE_CONTROL);
+  if (vi.mocked(serveGone).mock.calls.length > 0) {
+    expect(res.status).toBe(410);
+    expect(rewrite).toBeNull();
+    expect(res.headers.get("content-type")).toBe("text/html; charset=utf-8");
+    expect(res.headers.get("cache-control")).toBe(NO_STORE_CACHE_CONTROL);
+    expect(res.headers.get("x-robots-tag")).toBe("noindex");
     return { outcome: "gone", seen };
   }
   if (res.status === 302) return { outcome: "redirect", seen };
@@ -131,6 +142,16 @@ const run: Record<Reader, () => Promise<{ outcome: Outcome; seen: string }>> = {
   },
 };
 
+// The wording each gone fixture gets: a generic reason unless the owner acted.
+const goneVariants: Partial<Record<Fixture, GoneVariant>> = {
+  "disabled-operator": "disabled-flagged",
+  "disabled-automated": "disabled-flagged",
+  "disabled-owner": "disabled",
+  "disabled-expired": "disabled-flagged",
+  "deleted-operator": "deleted-flagged",
+  "deleted-owner": "deleted",
+};
+
 // Where a disabled or deleted link may still show its destination: only analytics, and only for
 // the owner's own disable.
 const mayShowDestination = (reader: Reader, fixture: Fixture) => reader === "getAnalytics" && fixture === "disabled-owner";
@@ -159,8 +180,9 @@ describe("link readers × link states", () => {
       expect(await db.$count(accessLog)).toBe(0);
     }
     if (result.outcome === "gone") {
-      const [, status] = vi.mocked(rewriteGone).mock.calls[0];
+      const [status] = vi.mocked(serveGone).mock.calls[0];
       expect(status.state).toBe(fixture.startsWith("deleted") ? "deleted" : "disabled");
+      expect(result.seen).toContain(`gone page http://localhost:3000/gone/${goneVariants[fixture]}<`);
     }
   });
 });
