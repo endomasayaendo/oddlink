@@ -24,6 +24,7 @@ const EXEMPT: Record<string, string> = {
   "lib/db/schema.ts": "defines the table",
   "lib/links/link-state.ts": "defines the state; getLinkState backs `proxy /c` misses and `proxy /analytics/c`",
   "lib/links/issue-link.ts": "only INSERTs new (active) rows and never reads state",
+  "lib/links/link-control.ts": "the only writer of state (disable, enable, tombstone); rules pinned by link-control.test.ts",
 };
 
 function sourceFiles(path: string): string[] {
