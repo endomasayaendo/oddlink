@@ -41,7 +41,7 @@ export default function PreviewPage({ params }: PageProps<"/preview/[shortCode]"
 async function PreviewContent({ params }: Pick<PageProps<"/preview/[shortCode]">, "params">) {
   const { shortCode } = await params;
   const data = await getLinkPreview(shortCode);
-  // The proxy already answers disabled and deleted links; #76 gives them a gone page.
+  // The proxy answers disabled and deleted links before this page runs.
   if (!data || data.state === "disabled" || data.state === "deleted") notFound();
   const expired = data.state === "expired";
 

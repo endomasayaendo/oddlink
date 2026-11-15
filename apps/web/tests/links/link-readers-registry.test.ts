@@ -3,8 +3,8 @@ import { join, relative } from "node:path";
 import { describe, expect, it } from "vitest";
 
 /**
- * Keeps every reader of url_mappings on lib/links/link-state.ts (ADR 0002, M4) and keeps rows from
- * ever being deleted (M3: phrases are tombstoned, never freed). A new file touching the table fails
+ * Keeps every reader of url_mappings on lib/links/link-state.ts and keeps rows from
+ * ever being deleted (a deleted link stays as a tombstone, so its phrase is never freed). A new file touching the table fails
  * here until it is added below, imports link-state, and has its rows in link-readers-matrix.test.ts.
  */
 

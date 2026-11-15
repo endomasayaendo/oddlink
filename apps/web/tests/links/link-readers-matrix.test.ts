@@ -13,7 +13,7 @@ import { proxy } from "@/proxy";
 import { resetUrlTables } from "../utils/reset-db";
 
 /**
- * Every reader of url_mappings against one row in every state (ADR 0002, M4). A new reader goes
+ * Every reader of url_mappings against one row in every state. A new reader goes
  * into `Reader` (and the registry test's allowlist); a new state into `Fixture`. Both are keys of
  * `expected`, so forgetting a cell is a type error.
  */
@@ -58,7 +58,7 @@ type Reader =
   | "getAnalytics"
   | "getLinkPreview";
 
-// Proxy outcomes: "gone" means rewriteGone answered (#76 turns it into a 410; today it is the 404).
+// Proxy outcomes: "gone" means rewriteGone answered.
 type Outcome = "hit" | "miss" | "redirect" | "not-found" | "preview" | "pass" | "gone" | "active" | "expired" | "disabled" | "deleted";
 
 const live = (a: Outcome, b: Outcome, gone: Outcome) =>
@@ -132,7 +132,7 @@ const run: Record<Reader, () => Promise<{ outcome: Outcome; seen: string }>> = {
 };
 
 // Where a disabled or deleted link may still show its destination: only analytics, and only for
-// the owner's own disable (ADR 0002, HTTP behaviour).
+// the owner's own disable.
 const mayShowDestination = (reader: Reader, fixture: Fixture) => reader === "getAnalytics" && fixture === "disabled-owner";
 
 const cases = (Object.keys(expected) as Reader[]).flatMap((reader) =>
@@ -153,7 +153,7 @@ describe("link readers × link states", () => {
       expect(result.seen).not.toContain("destination.example");
     }
     if (!live) {
-      // Disabled and deleted: no count, no log (ADR 0002), whichever reader ran.
+      // Disabled and deleted: no count, no log, whichever reader ran.
       const [row] = await db.select({ count: urlMappings.accessCount }).from(urlMappings).where(eq(urlMappings.shortCode, CODE));
       expect(row.count).toBe(0);
       expect(await db.$count(accessLog)).toBe(0);

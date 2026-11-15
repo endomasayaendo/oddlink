@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { type linkActor, urlMappings } from "@/lib/db/schema";
 
 /**
- * The only module that knows what the state columns of url_mappings mean (ADR 0002, M4).
+ * The only module that knows what the state columns of url_mappings mean.
  * Every reader decides "may this link be used / shown" through `isActiveLink` or `linkState`,
  * so redirect, analytics, preview and the proxy's checks can never disagree.
  */

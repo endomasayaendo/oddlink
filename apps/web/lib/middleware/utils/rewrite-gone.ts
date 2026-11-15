@@ -6,11 +6,10 @@ import { rewriteNotFound } from "@/lib/middleware/utils/rewrite-not-found";
 export type GoneStatus = Extract<LinkStatus, { state: "disabled" | "deleted" }>;
 
 /**
- * The response for a disabled or deleted link. `notFoundPath` is the static 404 page the caller
- * would otherwise serve. For now this is the same 404 as an unknown code; #76 turns it into the
- * 410 Gone page from ADR 0002 (and chooses the wording from `status`).
+ * The response for a disabled or deleted link: currently the same static 404 page (`notFoundPath`)
+ * as an unknown code.
  */
 export function rewriteGone(req: NextRequest, status: GoneStatus, notFoundPath: string) {
-  void status; // #76
+  void status;
   return rewriteNotFound(req, notFoundPath);
 }

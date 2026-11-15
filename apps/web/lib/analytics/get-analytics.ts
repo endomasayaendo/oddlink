@@ -17,7 +17,7 @@ type AnalyticsStats = {
 
 export type Analytics =
   | ({ state: "active" | "expired"; originalUrl: string } & AnalyticsStats)
-  // The analytics page is public, so the destination is only kept for an owner's own disable (ADR 0002).
+  // The analytics page is public, so the destination is kept only when the owner disabled the link.
   | ({ state: "disabled"; disabledBy: LinkActor; originalUrl: string | null } & AnalyticsStats)
   // A tombstone has no data left to show.
   | { state: "deleted"; shortCode: string };

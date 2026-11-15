@@ -20,7 +20,7 @@ export async function AnalyticsMiddleware(req: NextRequest, shortCode: string) {
   try {
     const status = await getLinkState(shortCode);
     if (!status) return notFound(req);
-    // #76 lets a disabled link through to show its state banner; until then it is gone like a deleted one.
+    // Disabled and deleted links get the gone response.
     if (status.state === "disabled" || status.state === "deleted") return rewriteGone(req, status, "/analytics/not-found");
   } catch (error) {
     // Let the page do its own lookup, so a DB outage reaches its error handling

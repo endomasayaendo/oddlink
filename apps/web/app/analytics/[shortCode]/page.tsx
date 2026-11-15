@@ -30,7 +30,7 @@ export default function AnalyticsPage({ params }: PageProps<"/analytics/[shortCo
 async function AnalyticsContent({ params }: Pick<PageProps<"/analytics/[shortCode]">, "params">) {
   const { shortCode } = await params;
   const data = await getAnalytics(shortCode);
-  // The proxy already answers disabled and deleted links; #76 adds the disabled banner and gone page.
+  // The proxy answers disabled and deleted links before this page runs.
   if (!data || data.state === "disabled" || data.state === "deleted") notFound();
 
   const chartData = data.dailyAccess.map((d) => ({ date: formatDay(d.date), count: d.count }));

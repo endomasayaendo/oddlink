@@ -10,12 +10,12 @@ export const SHORT_CODE_MAX_LENGTH = 255;
  */
 export const WORD_MAX_LENGTH = Math.floor((SHORT_CODE_MAX_LENGTH - "with".length - 5) / 5);
 
-/** Who disabled or deleted a link (ADR 0002). `owner` is unused until Phase 2 (ADR 0003). */
+/** Who disabled or deleted a link. */
 export const linkActor = pgEnum("link_actor", ["owner", "operator", "automated"]);
 
 /**
  * Short links. What the state columns mean (active / expired / disabled / deleted) is decided
- * only in lib/links/link-state.ts; readers must go through it (ADR 0002, M4).
+ * only in lib/links/link-state.ts; readers must go through it.
  */
 export const urlMappings = pgTable(
   "url_mappings",
@@ -48,7 +48,7 @@ export const accessLog = pgTable(
     id: bigserial({ mode: "number" }).primaryKey(),
     urlMappingId: bigint("url_mapping_id", { mode: "number" })
       .notNull()
-      // RESTRICT: links are never deleted (tombstones, ADR 0002), so a DELETE must fail loudly.
+      // RESTRICT: link rows are never deleted (a deleted link stays as a tombstone), so a DELETE must fail.
       .references(() => urlMappings.id, { onDelete: "restrict" }),
     accessedAt: timestamp("accessed_at", { withTimezone: true }).notNull().defaultNow(),
   },
