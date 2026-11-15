@@ -11,7 +11,7 @@ export type ExitCode = (typeof EXIT)[keyof typeof EXIT];
 export const USAGE = [
   "Usage: pnpm --filter web link:<disable|enable|delete> [--yes] <short-code | short-url>",
   "  <short-url>  a full short link such as http://localhost:3000/golden-clock-whispers;",
-  "               its last path segment is used (a trailing preview `+` is dropped)",
+  "               /<code>, /<code>+, /analytics/<code> or /preview/<code> (the host is ignored)",
   "  --yes, -y    delete only: skip the confirmation prompt (required without a terminal)",
 ].join("\n");
 
@@ -47,11 +47,12 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
 }
 
 /**
- * Accepts a bare short code or a pasted http(s) short URL. For a URL the last non-empty path
- * segment is taken and percent-decoded, and one trailing `+` (the preview suffix) is dropped, so
- * `/code`, `/code+` and `/analytics/code` all give `code`. The host is not checked. Returns null when
- * the result can never be a short code, including any bare argument containing `/` (a short code is
- * a single path segment).
+ * Accepts a bare short code or a pasted http(s) short URL. A URL must have one of the path shapes
+ * the app serves for a link: `/code`, `/code+` (preview), `/analytics/code` or `/preview/code`; the
+ * code segment is percent-decoded, and the preview `+` is dropped only from the single-segment
+ * shape, as the app does. The host, query and fragment are ignored. Returns null when the result can
+ * never be a short code, including any bare argument containing `/` (a short code is a single path
+ * segment).
  */
 export function extractShortCode(input: string): string | null {
   const trimmed = input.trim();
@@ -63,13 +64,16 @@ export function extractShortCode(input: string): string | null {
     } catch {
       return null;
     }
-    const last = url.pathname.split("/").filter(Boolean).at(-1) ?? "";
+    const segments = url.pathname.split("/").filter(Boolean);
+    const single = segments.length === 1;
+    const prefixed = segments.length === 2 && (segments[0] === "analytics" || segments[0] === "preview");
+    if (!single && !prefixed) return null;
     try {
-      code = decodeURIComponent(last);
+      code = decodeURIComponent(segments.at(-1) ?? "");
     } catch {
       return null;
     }
-    if (code.endsWith("+")) code = code.slice(0, -1);
+    if (single && code.endsWith("+")) code = code.slice(0, -1);
   }
   return !code.includes("/") && isPossibleShortCode(code) ? code : null;
 }

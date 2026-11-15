@@ -11,12 +11,14 @@ describe("extractShortCode", () => {
     ["https://oddlink.example/heavy-fox-sings%2B", "heavy-fox-sings"],
     ["https://oddlink.example/heavy-fox-sings?utm=x#top", "heavy-fox-sings"],
     ["https://oddlink.example/analytics/heavy-fox-sings", "heavy-fox-sings"],
+    ["https://oddlink.example/preview/heavy-fox-sings/", "heavy-fox-sings"],
+    ["https://oddlink.example/other/../heavy-fox-sings", "heavy-fox-sings"],
     ["HTTPS://oddlink.example/caf%C3%A9-code", "café-code"],
   ])("%j -> %j", (input, expected) => {
     expect(extractShortCode(input)).toBe(expected);
   });
 
-  it.each(["", "   ", "https://oddlink.example/", "https://oddlink.example/%E0%A4%A", "https://oddlink.example/a++", "robots.txt", "a".repeat(256), "ftp://x/abc", "heavy-fox/sings"])(
+  it.each(["", "   ", "https://oddlink.example/", "https://oddlink.example/%E0%A4%A", "https://oddlink.example/a++", "https://oddlink.example/analytics/heavy-fox+", "https://oddlink.example/x/heavy-fox", "https://oddlink.example/analytics/x/heavy-fox", "https://oddlink.example/a%2Fb", "robots.txt", "a".repeat(256), "ftp://x/abc", "heavy-fox/sings"])(
     "rejects %j",
     (input) => {
       expect(extractShortCode(input)).toBeNull();

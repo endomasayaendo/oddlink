@@ -204,9 +204,9 @@ pnpm --filter web link:delete <code>          # irreversible: asks you to type t
 pnpm --filter web link:delete --yes <code>    # skip the prompt (required when not in a terminal)
 ```
 
-`<code>` is a short code (`golden-clock-whispers`) or a pasted short link (`http://localhost:3000/golden-clock-whispers`, a `+` preview link, or an `/analytics/…` link): the last path segment is used, and the host is not checked. Delete keeps the row as a tombstone so the phrase is never issued again, clears its URL and count, and removes its access logs; it cannot be undone. Without a terminal and without `--yes`, delete refuses.
+`<code>` is a short code (`golden-clock-whispers`) or a pasted short link (`http://localhost:3000/golden-clock-whispers`, its `+` preview link, or its `/analytics/…` or `/preview/…` page); any other path is rejected, and the host is not checked, so a pasted production link still acts on whichever database `DATABASE_URL` points to. Delete keeps the row as a tombstone so the phrase is never issued again, clears its URL and count, and removes its access logs; it cannot be undone. Without a terminal and without `--yes`, delete refuses.
 
-Each run prints one line (`disabled: <code>`, `already disabled: <code>`, `not found: <code>`, …) and never the destination URL or connection details. Exit codes: `0` done or already in that state, `1` not found / deleted / not allowed / confirmation mismatch / database error, `2` usage error (including a refused delete). `pnpm --filter` reports every failure as `1`; a script that needs the exact code can run `pnpm -C apps/web link:disable <code>` instead.
+Each run prints one line (`disabled: <code>`, `already disabled: <code>`, `not found: <code>`, …) and never the destination URL or connection details. Exit codes: `0` done or already in that state, `1` not found / deleted / not allowed / confirmation mismatch / database error, `2` usage error (including a refused delete or a missing `DATABASE_URL`). `pnpm --filter` reports every failure as `1`; a script that needs the exact code can run `pnpm -C apps/web link:disable <code>` instead.
 
 The commands read `DATABASE_URL` from `apps/web/.env`, like `pnpm db:migrate`; a value set in the shell takes precedence. To act on production, pass its URL for that one command, without writing it into your shell history:
 

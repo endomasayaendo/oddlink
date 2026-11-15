@@ -59,12 +59,27 @@ export async function main(argv: readonly string[], io: CliIo): Promise<ExitCode
     result = await ACTIONS[command](shortCode);
   } catch (err) {
     // Only the error code: pg messages and error objects can carry host and connection details.
-    const code = (err as { code?: unknown } | null)?.code;
-    io.stderr(`error: the database operation failed${typeof code === "string" ? ` (${code})` : ""}`);
+    const code = errorCode(err);
+    io.stderr(`error: the database operation failed${code ? ` (${code})` : ""}`);
     return EXIT.failed;
   }
 
   const { stream, line } = describeResult(command, shortCode, result);
   io[stream](line);
   return exitCodeFor(result);
+}
+
+/**
+ * The first string `code` (SQLSTATE or a Node error code such as `ECONNREFUSED`) on the error or its
+ * `cause` chain. Drizzle wraps driver errors in an error without a code and keeps the original as
+ * `cause`.
+ */
+function errorCode(err: unknown): string | undefined {
+  let current = err;
+  for (let depth = 0; depth < 5 && typeof current === "object" && current !== null; depth++) {
+    const { code, cause } = current as { code?: unknown; cause?: unknown };
+    if (typeof code === "string") return code;
+    current = cause;
+  }
+  return undefined;
 }

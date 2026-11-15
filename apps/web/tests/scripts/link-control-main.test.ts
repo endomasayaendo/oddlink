@@ -103,4 +103,13 @@ describe("link-control CLI main", () => {
     expect(t.err).toEqual(["error: the database operation failed (ECONNREFUSED)"]);
     spy.mockRestore();
   });
+
+  it("finds the code on the cause of a wrapped driver error", async () => {
+    const t = io();
+    const driverError = Object.assign(new Error('database "x" does not exist'), { code: "3D000" });
+    const spy = vi.spyOn(db, "execute").mockRejectedValueOnce(new Error("Failed query: select ... params: secret", { cause: driverError }));
+    expect(await main(["disable", CODE], t.io)).toBe(1);
+    expect(t.err).toEqual(["error: the database operation failed (3D000)"]);
+    spy.mockRestore();
+  });
 });
