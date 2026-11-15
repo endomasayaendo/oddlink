@@ -88,4 +88,34 @@ describe("POST /api/issue", () => {
     await post(JSON.stringify({ originalUrl: "https://example.com" }));
     expect(checkIssueRateLimit).toHaveBeenLastCalledWith(null);
   });
+
+  describe("Content-Type", () => {
+    const body = JSON.stringify({ originalUrl: "https://example.com" });
+
+    it.each(["application/json", "application/json; charset=utf-8", "Application/JSON;charset=UTF-8"])(
+      "accepts %s",
+      async (contentType) => {
+        expect((await post(body, { "content-type": contentType })).status).toBe(200);
+      },
+    );
+
+    it.each(["text/plain", "text/plain;charset=UTF-8", "application/x-www-form-urlencoded", "multipart/form-data; boundary=x", "application/jsonp", "application/json-patch+json", ""])(
+      "returns 415 for %j before rate limiting or Safe Browsing",
+      async (contentType) => {
+        checkIssueRateLimit.mockClear();
+        checkUrlSafety.mockClear();
+        const res = await post(body, { "content-type": contentType });
+        expect(res.status).toBe(415);
+        expect(await res.json()).toEqual({ message: "Content-Type must be application/json" });
+        expect(checkIssueRateLimit).not.toHaveBeenCalled();
+        expect(checkUrlSafety).not.toHaveBeenCalled();
+      },
+    );
+
+    it("returns 415 without reading the body", async () => {
+      const req = new Request("http://localhost:3000/api/issue", { method: "POST", headers: { "content-type": "text/plain" }, body });
+      expect((await POST(req)).status).toBe(415);
+      expect(req.bodyUsed).toBe(false);
+    });
+  });
 });

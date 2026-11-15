@@ -2,7 +2,16 @@ import { issueShortUrl } from "@/lib/links/issue-link";
 import { ADVISORY_TEXT, ADVISORY_URL } from "@/lib/links/safe-browsing/advisory";
 import { getClientIp } from "@/lib/rate-limit/client-key";
 
+// `application/json`, optionally with parameters such as `; charset=utf-8`.
+const JSON_CONTENT_TYPE = /^application\/json\s*(;|$)/i;
+
 export async function POST(request: Request) {
+  // Checked before the body is read and before any limiter or Safe Browsing work. It also means a
+  // cross-site form or `text/plain` fetch can't issue links without a CORS preflight.
+  if (!JSON_CONTENT_TYPE.test(request.headers.get("content-type")?.trim() ?? "")) {
+    return Response.json({ message: "Content-Type must be application/json" }, { status: 415 });
+  }
+
   const body: unknown = await request.json().catch(() => null);
   const originalUrl = (body as { originalUrl?: unknown } | null)?.originalUrl;
 
