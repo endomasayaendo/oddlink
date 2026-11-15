@@ -22,10 +22,21 @@ const GONE_HEADERS = {
 const pages = new Map<GoneVariant, Promise<string>>();
 const memoize = process.env.NODE_ENV === "production";
 
+// A slow or hanging origin must not hold the response (or, once memoized, every later one): past
+// this, the 410 goes out with the plain-text wording.
+export const GONE_PAGE_TIMEOUT_MS = 2000;
+
 async function fetchGonePage(variant: GoneVariant): Promise<string> {
   // Fetched from the configured origin, never from the request's Host header.
-  const res = await fetch(`${BASE_URL}${gonePagePath(variant)}`, { cache: "no-store", redirect: "error" });
+  const res = await fetch(`${BASE_URL}${gonePagePath(variant)}`, {
+    cache: "no-store",
+    redirect: "error",
+    signal: AbortSignal.timeout(GONE_PAGE_TIMEOUT_MS),
+  });
   if (!res.ok) throw new Error(`Gone page ${variant} answered ${res.status}`);
+  // Anything else (a challenge or login page in front of the origin, say) is not the gone page.
+  const type = res.headers.get("content-type") ?? "";
+  if (!type.startsWith("text/html")) throw new Error(`Gone page ${variant} answered ${type || "no content type"}`);
   return res.text();
 }
 

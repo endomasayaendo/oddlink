@@ -1,9 +1,8 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { NextRequest } from "next/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { GONE_VARIANTS, goneMessage, goneVariant } from "@/lib/links/gone";
-import { serveGone } from "@/lib/middleware/utils/serve-gone";
+import { GONE_PAGE_TIMEOUT_MS, serveGone } from "@/lib/middleware/utils/serve-gone";
 import { stubGonePages } from "../utils/stub-gone-page";
 import { NO_STORE_CACHE_CONTROL } from "@/lib/middleware/utils/rewrite-not-found";
 
@@ -65,6 +64,32 @@ describe("serveGone", () => {
     expect(res.headers.get("cache-control")).toBe(NO_STORE_CACHE_CONTROL);
     expect(await res.text()).toBe("This link was disabled because it was reported or flagged as unsafe.");
     expect(console.error).toHaveBeenCalled();
+  });
+
+  it("gives up on a page that doesn't answer in time, instead of holding the response", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(AbortSignal, "timeout").mockImplementation(() => {
+      const controller = new AbortController();
+      setTimeout(() => controller.abort(new DOMException("timed out", "TimeoutError")), 10);
+      return controller.signal;
+    });
+    // Never answers on its own; only the abort signal ends it.
+    vi.spyOn(globalThis, "fetch").mockImplementation(
+      (_, init) => new Promise((_, reject) => init?.signal?.addEventListener("abort", () => reject(init.signal?.reason))),
+    );
+    const res = await serveGone({ state: "deleted", by: "owner" });
+    expect(res.status).toBe(410);
+    expect(await res.text()).toBe("This link was deleted.");
+    expect(AbortSignal.timeout).toHaveBeenCalledWith(GONE_PAGE_TIMEOUT_MS);
+  });
+
+  it("does not pass on a response that is not HTML, such as a challenge in front of the origin", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("{}", { headers: { "Content-Type": "application/json" } }));
+    const res = await serveGone({ state: "disabled", by: "owner" });
+    expect(res.status).toBe(410);
+    expect(res.headers.get("content-type")).toBe("text/plain; charset=utf-8");
+    expect(await res.text()).toBe("This link was disabled.");
   });
 
   it("fetches each page once per process in production, and again after a failure", async () => {
