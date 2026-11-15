@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { notFound, redirect } from "next/navigation";
 import { ACTION_FAILED_MESSAGE, submitIssue } from "@/ui/links/submit-issue";
 
 const form = (originalUrl?: string) => {
@@ -53,5 +54,19 @@ describe("submitIssue", () => {
       message: ACTION_FAILED_MESSAGE,
       submitted: "",
     });
+  });
+
+  it.each([
+    ["redirect", () => redirect("/elsewhere")],
+    ["notFound", () => notFound()],
+  ])("rethrows a %s from the action so Next.js can handle it", async (_name, thrower) => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    await expect(
+      submitIssue(async () => {
+        thrower();
+        return null;
+      }, form("https://example.com")),
+    ).rejects.toMatchObject({ digest: expect.stringMatching(/^NEXT_/) });
+    expect(consoleError).not.toHaveBeenCalled();
   });
 });

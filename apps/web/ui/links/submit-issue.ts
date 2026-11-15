@@ -1,3 +1,4 @@
+import { unstable_rethrow } from "next/navigation";
 import type { IssueState } from "@/lib/actions/issue-link";
 
 type IssueFailure = Extract<NonNullable<IssueState>, { ok: false }>;
@@ -23,6 +24,8 @@ export async function submitIssue(action: IssueActionFn, formData: FormData): Pr
     // The action ignores its previous state; pass null so the last submitted URL isn't sent back.
     next = await action(null, formData);
   } catch (error) {
+    // A redirect() or notFound() from the action also arrives as a rejection; let Next.js handle it.
+    unstable_rethrow(error);
     console.error(error);
     next = { ok: false, message: ACTION_FAILED_MESSAGE };
   }
