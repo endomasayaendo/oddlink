@@ -40,7 +40,7 @@ export function EyedSun({ className = "" }: DecorProps) {
   );
 }
 
-/** A low, sickly sun with its eye half shut, sinking into the A-2 fog. */
+/** A low, sickly sun with its eye half shut, sinking into the fog of the error pages. */
 export function HalfLidSun({ className = "" }: DecorProps) {
   return (
     <svg aria-hidden="true" viewBox="0 0 64 64" className={`pointer-events-none ${className}`}>
@@ -96,7 +96,7 @@ export function RustBleed({ className = "" }: DecorProps) {
   );
 }
 
-/** One or two rust drips hanging from the element above (the A-2 button). */
+/** One or two rust drips hanging from the element above (the error pages' button). */
 export function RustDrip({ className = "" }: DecorProps) {
   return (
     <svg aria-hidden="true" width="120" height="40" viewBox="0 0 120 40" className={`pointer-events-none ${className}`}>
