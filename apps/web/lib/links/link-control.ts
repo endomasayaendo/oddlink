@@ -72,7 +72,7 @@ export async function enableLink(shortCode: string, principal: Principal): Promi
 }
 
 /**
- * Deletes a link irreversibly: the row stays as a tombstone that keeps its short_code forever (M3,
+ * Deletes a link irreversibly: the row stays as a tombstone that keeps its short_code forever (so
  * the phrase is never issued again), its URL and count are cleared, any disable is dropped, and
  * its access_log rows are removed. Deleting a tombstone again is `changed: false`.
  *
