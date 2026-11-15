@@ -49,7 +49,7 @@ export async function disableLink(shortCode: string, principal: Principal): Prom
   const outcome = await mutate(
     shortCode,
     sql`disabled_at = now(), disabled_by = ${actor}`,
-    sql`(u.disabled_at IS NULL OR u.disabled_by = ANY(${actorArray(OVERRIDABLE_DISABLES[actor])}))`,
+    sql`(b.disabled_at IS NULL OR b.disabled_by = ANY(${actorArray(OVERRIDABLE_DISABLES[actor])}))`,
     // The only way the rule fails on a live row is an existing disable of the same or a higher rank.
     sql`'unchanged'`,
   );
@@ -65,7 +65,7 @@ export async function enableLink(shortCode: string, principal: Principal): Promi
   const outcome = await mutate(
     shortCode,
     sql`disabled_at = NULL, disabled_by = NULL`,
-    sql`u.disabled_at IS NOT NULL AND u.disabled_by = ANY(${actorArray(CLEARABLE_DISABLES[actor])})`,
+    sql`b.disabled_at IS NOT NULL AND b.disabled_by = ANY(${actorArray(CLEARABLE_DISABLES[actor])})`,
     sql`CASE WHEN (SELECT disabled_at FROM before) IS NULL THEN 'unchanged' ELSE 'not_allowed' END`,
   );
   return toResult(outcome);
@@ -110,8 +110,12 @@ async function mutate(shortCode: string, set: SQL, rule: SQL, ruleFailed: SQL): 
 /**
  * One statement that locks the row, applies `set` when it is live and `rule` holds, and reports why
  * not otherwise. `before` locks the latest committed version (READ COMMITTED re-reads it after
- * waiting), and the UPDATE joins on it, so the outcome and the reason come from the same row version.
- * `ruleFailed` is evaluated against `before` and only for a live row on which `rule` did not hold.
+ * waiting), so the liveness check and `rule` must read `b`, never `u`: `u` is scanned with the
+ * statement's start snapshot, and a stale `u` that fails the WHERE is skipped without EvalPlanQual
+ * ever re-checking the newer row (e.g. an operator disable racing an enable would report
+ * "already disabled" and leave the link active). With every condition on the locked `b`, the write
+ * and the reason come from the same row version. `ruleFailed` is evaluated against `before` and only
+ * for a live row on which `rule` did not hold.
  */
 function controlStatement(shortCode: string, set: SQL, rule: SQL, ruleFailed: SQL): SQL {
   return sql`
@@ -122,7 +126,7 @@ function controlStatement(shortCode: string, set: SQL, rule: SQL, ruleFailed: SQ
       UPDATE url_mappings u
       SET ${set}
       FROM before b
-      WHERE u.id = b.id AND u.deleted_at IS NULL AND ${rule}
+      WHERE u.id = b.id AND b.deleted_at IS NULL AND ${rule}
       RETURNING u.id
     )
     SELECT

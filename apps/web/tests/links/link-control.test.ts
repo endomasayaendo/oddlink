@@ -290,7 +290,7 @@ describe("deleteLink tombstone", () => {
       expect(rows).toHaveLength(1);
 
       const deleting = deleteLink(CODE, { actor: "operator" });
-      await waitForLockWait();
+      await waitForLockWait(await backendPid(client));
       // The redirect's log row commits only now, after the delete's snapshot would have been taken.
       await redirect.execute(sql`COMMIT`);
       expect(await deleting).toEqual(ok(true));
@@ -309,12 +309,86 @@ describe("deleteLink tombstone", () => {
   });
 });
 
-/** Waits until some backend is blocked on a lock (the statement under test). */
-async function waitForLockWait() {
+describe("disable/enable racing a concurrent state change", () => {
+  // Another transaction changes the row and commits while the control statement waits for its lock.
+  // The result must describe the row version the statement locked, never the stale one in its start
+  // snapshot (a stale row that fails the WHERE is skipped without EvalPlanQual re-checking it).
+  type Race = { name: string; fixture: Fixture; concurrent: SQL; op: () => Promise<ControlResult>; expected: Expected };
+  const enable = sql`disabled_at = NULL, disabled_by = NULL`;
+  const races: Race[] = [
+    {
+      name: "operator disable while an enable commits",
+      fixture: "disabled-operator",
+      concurrent: enable,
+      op: () => disableLink(CODE, { actor: "operator" }),
+      expected: [ok(true), "disabled:operator"],
+    },
+    {
+      name: "automated disable while an enable of the operator's disable commits",
+      fixture: "disabled-operator",
+      concurrent: enable,
+      op: () => disableLink(CODE, { actor: "automated" }),
+      expected: [ok(true), "disabled:automated"],
+    },
+    {
+      name: "automated disable while an operator disable commits",
+      fixture: "active",
+      concurrent: sql`disabled_at = now(), disabled_by = 'operator'`,
+      op: () => disableLink(CODE, { actor: "automated" }),
+      expected: [ok(false), "disabled:operator"],
+    },
+    {
+      name: "operator enable while an automated disable commits",
+      fixture: "active",
+      concurrent: sql`disabled_at = now(), disabled_by = 'automated'`,
+      op: () => enableLink(CODE, { actor: "operator" }),
+      expected: [ok(true), "active"],
+    },
+    {
+      name: "operator disable while a delete commits",
+      fixture: "active",
+      concurrent: sql`original_url = NULL, access_count = 0, deleted_at = now(), deleted_by = 'operator'`,
+      op: () => disableLink(CODE, { actor: "operator" }),
+      expected: [fail("deleted"), "deleted:operator"],
+    },
+  ];
+
+  it.each(races)("$name", async ({ fixture, concurrent, op, expected: [result, row] }) => {
+    await setup(fixture);
+    const client = new Client({ connectionString: process.env.DATABASE_URL });
+    await client.connect();
+    try {
+      const other = drizzle(client);
+      await other.execute(sql`BEGIN`);
+      if (row?.startsWith("deleted")) {
+        await other.execute(sql`DELETE FROM access_log WHERE url_mapping_id IN (SELECT id FROM url_mappings WHERE short_code = ${CODE})`);
+      }
+      await other.execute(sql`UPDATE url_mappings SET ${concurrent} WHERE short_code = ${CODE}`);
+      const pending = op();
+      await waitForLockWait(await backendPid(client));
+      await other.execute(sql`COMMIT`);
+      expect(await pending).toEqual(result);
+    } finally {
+      await client.end();
+    }
+    expect((await readRow(CODE))?.summary).toBe(row);
+    await expectInvariants();
+  });
+});
+
+/** Waits until a backend is blocked on a lock held by `blockerPid` (the statement under test). */
+async function waitForLockWait(blockerPid: number) {
   for (let i = 0; i < 200; i++) {
-    const { rows } = await db.execute<{ waiting: number }>(sql`SELECT count(*)::int AS waiting FROM pg_locks WHERE NOT granted`);
+    const { rows } = await db.execute<{ waiting: number }>(
+      sql`SELECT count(*)::int AS waiting FROM pg_stat_activity WHERE ${blockerPid}::int = ANY(pg_blocking_pids(pid))`,
+    );
     if (rows[0].waiting > 0) return;
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
-  throw new Error("no backend started waiting for a lock");
+  throw new Error("no backend started waiting for the lock");
+}
+
+async function backendPid(client: Client): Promise<number> {
+  const { rows } = await client.query<{ pid: number }>("SELECT pg_backend_pid() AS pid");
+  return rows[0].pid;
 }
