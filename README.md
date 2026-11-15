@@ -103,6 +103,8 @@ curl -X POST http://localhost:3000/api/issue \
 }
 ```
 
+The request must be sent with `Content-Type: application/json` (a `charset` parameter is fine); anything else gets `415` before the body is read or the request counts toward the rate limit.
+
 Errors return `{"message": "..."}`: `400` for a blank or invalid URL (only `http`/`https` are accepted), `422` if Google Safe Browsing flags the URL (the body also carries `"advisory": "Advisory provided by Google"` and `"advisoryUrl"`), `429` with a `Retry-After` header (seconds) when the client has issued too many links recently (see [Rate limiting](#rate-limiting)), `503` if no unique phrase could be generated.
 
 ### Safe Browsing check
@@ -121,6 +123,10 @@ Issuing links is rate-limited in two layers ([ADR 0004](docs/adr/0004-rate-limit
 The client is identified by `x-real-ip`, else the first `x-forwarded-for` entry (IPv6 grouped by /64), stored only as an HMAC with `RATE_LIMIT_SECRET`, never as a raw address. This relies on the proxy in front overwriting those headers, as Vercel's edge does; a self-hosted deployment must put a reverse proxy in front that overwrites `X-Forwarded-For` / `X-Real-IP`.
 
 Links expire one year after they are issued.
+
+### Security headers
+
+Every response (pages, the short-link `302`, the `404` pages, the API) gets a static Content-Security-Policy plus `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `X-Frame-Options: DENY`, a minimal `Permissions-Policy`, and `Strict-Transport-Security` in production (`apps/web/lib/http/security-headers.ts`, applied in `next.config.ts`). The CSP allows only this origin; scripts need `'unsafe-inline'` because a nonce-based CSP would force every page to render dynamically, giving up the prerendered shells. Anything that loads from another origin (analytics, embeds, a CDN font) must be added to the policy.
 
 ---
 
