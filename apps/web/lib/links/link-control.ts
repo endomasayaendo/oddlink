@@ -3,23 +3,23 @@ import { db } from "@/lib/db";
 import type { LinkActor } from "@/lib/links/link-state";
 
 /**
- * The only module that changes a link's state: disable, enable and delete (tombstone), ADR 0002.
- * Every rule (M5 ranks, tombstones, clearing logs, and in Phase 2 "only the owner of this row") is
+ * The only module that changes a link's state: disable, enable and delete (tombstone).
+ * Every rule (who may override or clear whose disable, tombstoning, clearing logs) is
  * enforced in the WHERE clause of the writing statement, and the failure reason is derived from the
  * row that same statement locked. Nothing is checked first and written afterwards.
  */
 
-/** Who is acting. `owner` is ADR 0002 Phase 2 (ADR 0003) and is rejected until then. */
+/** Who is acting. `owner` is not supported yet and is rejected. */
 export type Principal = { actor: "operator" } | { actor: "automated" } | { actor: "owner"; userId: string };
 
-/** Automation never deletes (CHECK deleted_by_not_automated); retention (#35) must decide its own path. */
+/** Automation never deletes (the CHECK deleted_by_not_automated forbids it too). */
 export type DeletePrincipal = Exclude<Principal, { actor: "automated" }>;
 
 export type ControlResult = { ok: true; changed: boolean } | { ok: false; reason: "not_found" | "deleted" | "not_allowed" };
 
 /**
  * Higher ranks may override lower-ranked disables (operator > automated > owner), so an owner can
- * never undo an operator or automated disable (M5) and automation cannot undo the operator's.
+ * never undo an operator or automated disable and automation cannot undo the operator's.
  */
 const OVERRIDABLE_DISABLES: Record<LinkActor, LinkActor[]> = {
   operator: ["automated", "owner"],
@@ -29,7 +29,7 @@ const OVERRIDABLE_DISABLES: Record<LinkActor, LinkActor[]> = {
 
 /**
  * Whose disables each actor may clear. Automation only takes links out of service; a human undoes
- * its false positives. The owner may clear only their own disables (Phase 2).
+ * its false positives. The owner may clear only their own disables.
  */
 const CLEARABLE_DISABLES: Record<LinkActor, LinkActor[]> = {
   operator: ["operator", "automated", "owner"],
@@ -45,7 +45,7 @@ type Outcome = "changed" | "unchanged" | "not_found" | "deleted" | "not_allowed"
  * left as is (`changed: false`).
  */
 export async function disableLink(shortCode: string, principal: Principal): Promise<ControlResult> {
-  const actor = phase1Actor(principal);
+  const actor = supportedActor(principal);
   const outcome = await mutate(
     shortCode,
     sql`disabled_at = now(), disabled_by = ${actor}`,
@@ -58,10 +58,10 @@ export async function disableLink(shortCode: string, principal: Principal): Prom
 
 /**
  * Puts a disabled link back in service. A link that is not disabled is `changed: false`; a disable
- * this actor may not clear (M5) is `not_allowed`.
+ * this actor may not clear is `not_allowed`.
  */
 export async function enableLink(shortCode: string, principal: Principal): Promise<ControlResult> {
-  const actor = phase1Actor(principal);
+  const actor = supportedActor(principal);
   const outcome = await mutate(
     shortCode,
     sql`disabled_at = NULL, disabled_by = NULL`,
@@ -84,7 +84,7 @@ export async function enableLink(shortCode: string, principal: Principal): Promi
  * committed before the lock was ours.
  */
 export async function deleteLink(shortCode: string, principal: DeletePrincipal): Promise<ControlResult> {
-  const actor = phase1Actor(principal);
+  const actor = supportedActor(principal);
   return db.transaction(async (tx) => {
     // (1) Tombstone.
     const { rows } = await tx.execute<{ outcome: Outcome; id: string | null }>(
@@ -155,9 +155,9 @@ function toResult(outcome: Outcome): ControlResult {
   }
 }
 
-/** Rejects `owner` before any DB access: ownership (owner_id) does not exist until Phase 2. */
-function phase1Actor(principal: Principal): Exclude<LinkActor, "owner"> {
-  if (principal.actor === "owner") throw new Error("owner control is ADR 0002 Phase 2");
+/** Rejects `owner` before any DB access: links have no owner yet. */
+function supportedActor(principal: Principal): Exclude<LinkActor, "owner"> {
+  if (principal.actor === "owner") throw new Error("owner control is not supported");
   return principal.actor;
 }
 

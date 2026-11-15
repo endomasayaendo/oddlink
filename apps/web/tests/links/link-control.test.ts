@@ -100,7 +100,7 @@ async function expectRow(expected: Row | null, { restamped }: { restamped: boole
 }
 
 async function expectInvariants() {
-  // The five CHECKs from ADR 0002, re-evaluated over every row after the operation.
+  // The five CHECKs on url_mappings, re-evaluated over every row after the operation.
   const [{ violations }] = await db.execute<{ violations: number }>(sql`
     SELECT count(*)::int AS violations FROM url_mappings WHERE NOT (
       ((disabled_at IS NULL) = (disabled_by IS NULL))
@@ -225,7 +225,7 @@ describe("link-control rules", () => {
   });
 });
 
-describe("owner principal (ADR 0002 Phase 2)", () => {
+describe("owner principal", () => {
   const owner: Principal = { actor: "owner", userId: "user-1" };
 
   it.each([
@@ -236,7 +236,7 @@ describe("owner principal (ADR 0002 Phase 2)", () => {
     await setup("active");
     const execute = vi.spyOn(db, "execute");
     const transaction = vi.spyOn(db, "transaction");
-    await expect(fn(CODE, owner as Extract<Principal, { actor: "owner" }>)).rejects.toThrow("owner control is ADR 0002 Phase 2");
+    await expect(fn(CODE, owner as Extract<Principal, { actor: "owner" }>)).rejects.toThrow("owner control is not supported");
     expect(execute).not.toHaveBeenCalled();
     expect(transaction).not.toHaveBeenCalled();
   });
