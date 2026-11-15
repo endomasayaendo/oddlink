@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { bigint, bigserial, boolean, check, index, integer, pgTable, primaryKey, text, timestamp, varchar } from "drizzle-orm/pg-core";
+import { bigint, bigserial, boolean, check, index, integer, pgEnum, pgTable, primaryKey, text, timestamp, varchar } from "drizzle-orm/pg-core";
 
 /** Column length of url_mappings.short_code; issuing regenerates phrases longer than this. */
 export const SHORT_CODE_MAX_LENGTH = 255;
@@ -10,15 +10,37 @@ export const SHORT_CODE_MAX_LENGTH = 255;
  */
 export const WORD_MAX_LENGTH = Math.floor((SHORT_CODE_MAX_LENGTH - "with".length - 5) / 5);
 
-export const urlMappings = pgTable("url_mappings", {
-  id: bigserial({ mode: "number" }).primaryKey(),
-  // UNIQUE already creates an index; no separate index on short_code.
-  shortCode: varchar("short_code", { length: SHORT_CODE_MAX_LENGTH }).notNull().unique(),
-  originalUrl: text("original_url").notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  expiresAt: timestamp("expires_at", { withTimezone: true }),
-  accessCount: bigint("access_count", { mode: "number" }).notNull().default(0),
-});
+/** Who disabled or deleted a link. */
+export const linkActor = pgEnum("link_actor", ["owner", "operator", "automated"]);
+
+/**
+ * Short links. What the state columns mean (active / expired / disabled / deleted) is decided
+ * only in lib/links/link-state.ts; readers must go through it.
+ */
+export const urlMappings = pgTable(
+  "url_mappings",
+  {
+    id: bigserial({ mode: "number" }).primaryKey(),
+    // UNIQUE already creates an index; no separate index on short_code.
+    shortCode: varchar("short_code", { length: SHORT_CODE_MAX_LENGTH }).notNull().unique(),
+    // NULL only on a deleted tombstone (see the url_unless_deleted / tombstone_is_empty checks).
+    originalUrl: text("original_url"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    accessCount: bigint("access_count", { mode: "number" }).notNull().default(0),
+    disabledAt: timestamp("disabled_at", { withTimezone: true }),
+    disabledBy: linkActor("disabled_by"),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    deletedBy: linkActor("deleted_by"),
+  },
+  (t) => [
+    check("disabled_pair", sql`(${t.disabledAt} IS NULL) = (${t.disabledBy} IS NULL)`),
+    check("deleted_pair", sql`(${t.deletedAt} IS NULL) = (${t.deletedBy} IS NULL)`),
+    check("deleted_by_not_automated", sql`${t.deletedBy} <> 'automated'`),
+    check("url_unless_deleted", sql`${t.deletedAt} IS NOT NULL OR ${t.originalUrl} IS NOT NULL`),
+    check("tombstone_is_empty", sql`${t.deletedAt} IS NULL OR ${t.originalUrl} IS NULL`),
+  ],
+);
 
 export const accessLog = pgTable(
   "access_log",
@@ -26,7 +48,8 @@ export const accessLog = pgTable(
     id: bigserial({ mode: "number" }).primaryKey(),
     urlMappingId: bigint("url_mapping_id", { mode: "number" })
       .notNull()
-      .references(() => urlMappings.id, { onDelete: "cascade" }),
+      // RESTRICT: link rows are never deleted (a deleted link stays as a tombstone), so a DELETE must fail.
+      .references(() => urlMappings.id, { onDelete: "restrict" }),
     accessedAt: timestamp("accessed_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("idx_access_log_url_mapping_id").on(t.urlMappingId), index("idx_access_log_accessed_at").on(t.accessedAt)],

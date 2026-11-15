@@ -92,6 +92,26 @@ describe("proxy redirects", () => {
     expect(console.error).toHaveBeenCalled();
   });
 
+  it("answers 503 when the state lookup after a miss fails", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(db, "select").mockImplementationOnce(() => {
+      throw new Error("connection lost");
+    });
+    expect((await request("/missing-code").res).status).toBe(503);
+    expect(console.error).toHaveBeenCalled();
+  });
+
+  it.each([
+    ["disabled", sql`disabled_at = now(), disabled_by = 'operator'`],
+    ["deleted", sql`original_url = NULL, deleted_at = now(), deleted_by = 'operator'`],
+  ])("serves the 404 page for a %s link without counting it", async (_, set) => {
+    const link = await insertLink("gone-code", "https://example.com/target", future());
+    await db.execute(sql`UPDATE url_mappings SET ${set} WHERE short_code = 'gone-code'`);
+    expectNotFound(await request("/gone-code").res);
+    expect(await countOf("gone-code")).toBe(0);
+    expect(await logsOf(link.id)).toBe(0);
+  });
+
   it.each(["/foo", "/analytics", "/api", "/_x", "/_next"])(
     "treats %s as a short code and serves the 404 page for it",
     async (path) => {

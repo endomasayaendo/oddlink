@@ -1,11 +1,11 @@
 import { NextRequest } from "next/server";
 import { describe, expect, it, vi } from "vitest";
-import { shortCodeExists } from "@/lib/analytics/short-code-exists";
+import { getLinkState } from "@/lib/links/link-state";
 import { AnalyticsMiddleware } from "@/lib/middleware/analytics";
 import { NOT_FOUND_CACHE_CONTROL } from "@/lib/middleware/utils/rewrite-not-found";
 
-vi.mock("@/lib/analytics/short-code-exists", () => ({
-  shortCodeExists: vi.fn().mockRejectedValue(new Error("connection refused")),
+vi.mock("@/lib/links/link-state", () => ({
+  getLinkState: vi.fn().mockRejectedValue(new Error("connection refused")),
 }));
 
 describe("AnalyticsMiddleware", () => {
@@ -19,11 +19,11 @@ describe("AnalyticsMiddleware", () => {
   });
 
   it.each(["", "a".repeat(256), "\0", "foo.bar", "not-found"])("rewrites %j to the 404 page without a lookup", async (key) => {
-    vi.mocked(shortCodeExists).mockClear();
+    vi.mocked(getLinkState).mockClear();
     const req = new NextRequest("http://localhost:3000/analytics/x");
     const response = await AnalyticsMiddleware(req, key);
     expect(response.headers.get("x-middleware-rewrite")).toBe("http://localhost:3000/analytics/not-found");
     expect(response.headers.get("cache-control")).toBe(NOT_FOUND_CACHE_CONTROL);
-    expect(shortCodeExists).not.toHaveBeenCalled();
+    expect(getLinkState).not.toHaveBeenCalled();
   });
 });

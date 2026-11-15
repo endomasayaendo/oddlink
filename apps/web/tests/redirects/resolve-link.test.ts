@@ -59,6 +59,19 @@ describe("resolveShortCode", () => {
     expect(await logsOf(link.id)).toBe(0);
   });
 
+  it.each([
+    ["disabled by the operator", sql`disabled_at = now(), disabled_by = 'operator'`],
+    ["disabled by automation", sql`disabled_at = now(), disabled_by = 'automated'`],
+    ["disabled by its owner", sql`disabled_at = now(), disabled_by = 'owner'`],
+    ["deleted", sql`original_url = NULL, access_count = 0, deleted_at = now(), deleted_by = 'operator'`],
+  ])("returns null without counting or logging a link %s", async (_, set) => {
+    const link = await insertLink("gone-code", "https://example.com", future());
+    await db.execute(sql`UPDATE url_mappings SET ${set} WHERE short_code = 'gone-code'`);
+    expect(await resolveShortCode("gone-code")).toBeNull();
+    expect(await countOf("gone-code")).toBe(0);
+    expect(await logsOf(link.id)).toBe(0);
+  });
+
   it("does not write a log row for an unknown code", async () => {
     await resolveShortCode("missing-code");
     expect(await db.$count(accessLog)).toBe(0);

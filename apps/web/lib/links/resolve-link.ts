@@ -1,13 +1,14 @@
 import { sql } from "drizzle-orm";
 import { db } from "@/lib/db";
+import { isActiveLink } from "@/lib/links/link-state";
 import { hasUserinfo } from "@/lib/links/url-safety";
 
 export type ResolvedLink = { id: number; originalUrl: string };
 
 /**
- * Finds an unexpired http(s) link, counts the access and writes its access log row
- * in one statement, so the count and the log can never diverge and concurrent hits
- * never lose increments.
+ * Finds an active http(s) link (`isActiveLink`: not deleted, disabled or expired), counts the
+ * access and writes its access log row in one statement, so the count and the log can never
+ * diverge and concurrent hits never lose increments.
  *
  * The SQL scheme check matches what `new URL()` accepts as http(s) (case-insensitive,
  * `//` optional), so it agrees with `toRedirectUrl` for newly issued values. Rows from before
@@ -15,12 +16,14 @@ export type ResolvedLink = { id: number; originalUrl: string };
  * `toRedirectUrl` is the authoritative gate and decides whether the redirect happens.
  */
 export async function resolveShortCode(shortCode: string): Promise<ResolvedLink | null> {
+  // original_url is nullable only on a tombstone; isActiveLink excludes deleted rows and the
+  // url_unless_deleted CHECK makes it NOT NULL for every other row, so a hit always has one.
   const { rows } = await db.execute<{ id: string; original_url: string }>(sql`
     WITH hit AS (
       UPDATE url_mappings
       SET access_count = access_count + 1
       WHERE short_code = ${shortCode}
-        AND (expires_at IS NULL OR expires_at > now())
+        AND ${isActiveLink}
         AND original_url ~* '^https?:'
       RETURNING id, original_url
     ),

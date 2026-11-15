@@ -41,7 +41,9 @@ export default function PreviewPage({ params }: PageProps<"/preview/[shortCode]"
 async function PreviewContent({ params }: Pick<PageProps<"/preview/[shortCode]">, "params">) {
   const { shortCode } = await params;
   const data = await getLinkPreview(shortCode);
-  if (!data) notFound();
+  // The proxy answers disabled and deleted links before this page runs.
+  if (!data || data.state === "disabled" || data.state === "deleted") notFound();
+  const expired = data.state === "expired";
 
   const { host, insecure } = describeTarget(data.target);
   const encodedCode = encodeURIComponent(data.shortCode);
@@ -64,7 +66,7 @@ async function PreviewContent({ params }: Pick<PageProps<"/preview/[shortCode]">
         )}
       </div>
 
-      {data.expired && data.expiresAt && (
+      {expired && data.expiresAt && (
         <div role="status" className="mb-8 rounded-wobble border-2 border-rust bg-rust-wash p-4 text-center font-semibold text-rust">
           Expired on {formatDate(data.expiresAt)}. This link no longer redirects.
         </div>
@@ -77,7 +79,7 @@ async function PreviewContent({ params }: Pick<PageProps<"/preview/[shortCode]">
       </div>
 
       <div className="flex flex-col items-center gap-4">
-        {!data.expired && (
+        {!expired && (
           // The short link itself, not the destination: the click is counted and every redirect check applies.
           // A plain <a> on purpose: next/link would prefetch it, and a redirect isn't a page.
           <a

@@ -1,12 +1,14 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { shortCodeExists } from "@/lib/analytics/short-code-exists";
+import { getLinkState } from "@/lib/links/link-state";
 import { isPossibleShortCode } from "@/lib/middleware/utils/is-possible-short-code";
 import { isReservedKey } from "@/lib/middleware/utils/is-reserved-key";
+import { rewriteGone } from "@/lib/middleware/utils/rewrite-gone";
 import { rewriteNotFound } from "@/lib/middleware/utils/rewrite-not-found";
 
 /**
- * Answers unknown codes with a real 404 before the page renders. The analytics page
- * streams behind a prerendered shell, so a notFound() there can only keep the 200.
+ * Answers unknown codes with a real 404 (and disabled or deleted ones with `rewriteGone`) before
+ * the page renders. The analytics page streams behind a prerendered shell, so a notFound() there
+ * can only keep the 200.
  * `shortCode` is `""` when the path segment couldn't be decoded.
  */
 export async function AnalyticsMiddleware(req: NextRequest, shortCode: string) {
@@ -16,7 +18,10 @@ export async function AnalyticsMiddleware(req: NextRequest, shortCode: string) {
   }
 
   try {
-    if (!(await shortCodeExists(shortCode))) return notFound(req);
+    const status = await getLinkState(shortCode);
+    if (!status) return notFound(req);
+    // Disabled and deleted links get the gone response.
+    if (status.state === "disabled" || status.state === "deleted") return rewriteGone(req, status, "/analytics/not-found");
   } catch (error) {
     // Let the page do its own lookup, so a DB outage reaches its error handling
     // instead of failing here with a bare 500.
