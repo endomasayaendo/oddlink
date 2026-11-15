@@ -1,9 +1,9 @@
-import { sql, type SQL } from "drizzle-orm";
+import { eq, sql, type SQL } from "drizzle-orm";
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getAnalytics } from "@/lib/analytics/get-analytics";
 import { db } from "@/lib/db";
-import { urlMappings } from "@/lib/db/schema";
+import { accessLog, urlMappings } from "@/lib/db/schema";
 import { getLinkPreview } from "@/lib/links/get-link-preview";
 import { getLinkState, type LinkActor } from "@/lib/links/link-state";
 import { resolveShortCode } from "@/lib/links/resolve-link";
@@ -151,6 +151,12 @@ describe("link readers × link states", () => {
     const live = fixture === "active" || fixture === "no-expiry" || fixture === "expired";
     if (!live && !mayShowDestination(reader, fixture)) {
       expect(result.seen).not.toContain("destination.example");
+    }
+    if (!live) {
+      // Disabled and deleted: no count, no log (ADR 0002), whichever reader ran.
+      const [row] = await db.select({ count: urlMappings.accessCount }).from(urlMappings).where(eq(urlMappings.shortCode, CODE));
+      expect(row.count).toBe(0);
+      expect(await db.$count(accessLog)).toBe(0);
     }
     if (result.outcome === "gone") {
       const [, status] = vi.mocked(rewriteGone).mock.calls[0];
