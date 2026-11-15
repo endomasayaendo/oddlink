@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { type SQL, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { isActiveLink } from "@/lib/links/link-state";
 import { hasUserinfo } from "@/lib/links/url-safety";
@@ -18,7 +18,17 @@ export type ResolvedLink = { id: number; originalUrl: string };
 export async function resolveShortCode(shortCode: string): Promise<ResolvedLink | null> {
   // original_url is nullable only on a tombstone; isActiveLink excludes deleted rows and the
   // url_unless_deleted CHECK makes it NOT NULL for every other row, so a hit always has one.
-  const { rows } = await db.execute<{ id: string; original_url: string }>(sql`
+  const { rows } = await db.execute<{ id: string; original_url: string }>(redirectStatement(shortCode));
+  const row = rows[0];
+  return row ? { id: Number(row.id), originalUrl: row.original_url } : null;
+}
+
+/**
+ * The single redirect statement behind `resolveShortCode`. Exported so tests can run the exact
+ * statement inside their own open transaction (link-control's concurrency test).
+ */
+export function redirectStatement(shortCode: string): SQL {
+  return sql`
     WITH hit AS (
       UPDATE url_mappings
       SET access_count = access_count + 1
@@ -31,9 +41,7 @@ export async function resolveShortCode(shortCode: string): Promise<ResolvedLink 
       INSERT INTO access_log (url_mapping_id) SELECT id FROM hit
     )
     SELECT id, original_url FROM hit
-  `);
-  const row = rows[0];
-  return row ? { id: Number(row.id), originalUrl: row.original_url } : null;
+  `;
 }
 
 /** Returns a URL safe to use as a redirect Location, or null if the stored value isn't one. */
