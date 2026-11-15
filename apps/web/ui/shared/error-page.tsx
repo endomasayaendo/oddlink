@@ -1,18 +1,21 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { HalfLidSun, RustBleed, RustDrip } from "@/ui/shared/decor";
 import { buttonClass } from "@/ui/shared/styles";
 
 type Props = {
   code: string;
   message: string;
+  /** Replaces the default "Back to OddLink" link, e.g. with a retry button. */
+  action?: ReactNode;
 };
 
 const stillWhenReduced = "motion-reduce:animate-none";
 
-// A-2, "fog and rust": the deepest level of the eerie layer, shared by every not-found page.
+// A-2, "fog and rust": the deepest level of the eerie layer, shared by every not-found and error page.
 // Layers, back to front: old paper, the sinking sun, rust, fog, then the content. Fog and rust
 // stay behind the content so text and the button keep their resting contrast at every frame.
-export function ErrorPage({ code, message }: Props) {
+export function ErrorPage({ code, message, action }: Props) {
   // The last character sags and is eaten away.
   const head = code.slice(0, -1);
   const tail = code.slice(-1);
@@ -45,9 +48,11 @@ export function ErrorPage({ code, message }: Props) {
         </p>
         <p className={`mb-10 font-hand text-xl text-ink sm:text-2xl animate-flicker-late ${stillWhenReduced}`}>{message}</p>
         <div className="relative inline-block">
-          <Link href="/" className={`${buttonClass} px-6 py-3`}>
-            Back to OddLink
-          </Link>
+          {action ?? (
+            <Link href="/" className={`${buttonClass} px-6 py-3`}>
+              Back to OddLink
+            </Link>
+          )}
           <RustDrip className="absolute top-full left-1/2 -translate-x-1/2" />
         </div>
       </div>

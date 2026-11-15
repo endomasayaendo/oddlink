@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { issueAction, type IssueState } from "@/lib/actions/issue-link";
+import { issueAction } from "@/lib/actions/issue-link";
 import { useHistory } from "@/ui/links/use-history";
 import { ErrorMessage } from "@oddlink/ui";
 import {
@@ -13,12 +13,8 @@ import {
 import { FlipOverlay } from "./flip-overlay";
 import { HistoryList } from "./history-list";
 import { ResultCard } from "./result-card";
+import { type FormState, submitIssue } from "./submit-issue";
 import { UrlForm } from "./url-form";
-
-type IssueFailure = Extract<NonNullable<IssueState>, { ok: false }>;
-
-// Client-only: failures also carry the submitted URL so the input can be restored.
-type FormState = Exclude<IssueState, IssueFailure> | (IssueFailure & { submitted: string });
 
 export function Shortener() {
   const { history, addEntry, removeEntry } = useHistory();
@@ -27,15 +23,10 @@ export function Shortener() {
 
   const [state, formAction, pending] = useActionState(async (_prev: FormState, formData: FormData): Promise<FormState> => {
     setCopyError("");
-    // The action ignores its previous state; pass null so the last submitted URL isn't sent back.
-    const next = await issueAction(null, formData);
+    // React resets the form after every action, so a failed submit (including one where the action
+    // call itself rejects) carries the input back in the state, fed back as the defaultValue.
+    const next = await submitIssue(issueAction, formData);
     if (next?.ok) addEntry({ shortCode: next.shortCode, shortUrl: next.shortUrl, originalUrl: next.originalUrl });
-    // React resets the form after every action, so a failed submit would wipe the input unless
-    // the value travels in the returned state and is fed back as the input's defaultValue.
-    if (next && !next.ok) {
-      const submitted = formData.get("originalUrl");
-      return { ...next, submitted: typeof submitted === "string" ? submitted : "" };
-    }
     return next;
   }, null);
 
