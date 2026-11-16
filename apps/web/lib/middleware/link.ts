@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { getLinkState, type LinkStatus } from "@/lib/links/link-state";
-import { type ResolvedLink, resolveShortCode, toRedirectUrl } from "@/lib/links/resolve-link";
+import { findActiveLink, type ResolvedLink, resolveShortCode, toRedirectUrl } from "@/lib/links/resolve-link";
 import { isPossibleShortCode } from "@/lib/middleware/utils/is-possible-short-code";
 import { rewriteGone } from "@/lib/middleware/utils/rewrite-gone";
 import { rewriteNotFound } from "@/lib/middleware/utils/rewrite-not-found";
@@ -9,11 +9,13 @@ export async function LinkMiddleware(req: NextRequest, key: string) {
   // Keys that can't be a short code never reach the DB (a NUL there would even fail the query).
   if (!isPossibleShortCode(key)) return notFound(req);
 
+  // HEAD comes from link checkers and monitors, not people: it gets the same answer uncounted.
+  const lookup = req.method === "HEAD" ? findActiveLink : resolveShortCode;
   let link: ResolvedLink | null;
   try {
-    link = await resolveShortCode(key);
+    link = await lookup(key);
   } catch (error) {
-    // Counting and logging are one statement, so a failed write means no redirect either.
+    // No redirect without a successful lookup; for GET that includes the count-and-log write.
     console.error("Failed to resolve short link", error);
     return unavailable();
   }
