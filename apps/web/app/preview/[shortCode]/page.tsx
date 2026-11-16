@@ -6,6 +6,7 @@ import { shortUrlFor } from "@/lib/constants";
 import { formatDate } from "@/lib/format-date";
 import { describeTarget } from "@/lib/links/describe-target";
 import { getLinkPreview } from "@/lib/links/get-link-preview";
+import { shortCodeFromParams } from "@/lib/links/short-code-param";
 import { StatCard } from "@/ui/analytics/stat-card";
 import { buttonClass } from "@/ui/shared/styles";
 
@@ -39,7 +40,7 @@ export default function PreviewPage({ params }: PageProps<"/preview/[shortCode]"
 }
 
 async function PreviewContent({ params }: Pick<PageProps<"/preview/[shortCode]">, "params">) {
-  const { shortCode } = await params;
+  const shortCode = await shortCodeFromParams(params);
   const data = await getLinkPreview(shortCode);
   // The proxy answers disabled and deleted links before this page runs.
   if (!data || data.state === "disabled" || data.state === "deleted") notFound();
