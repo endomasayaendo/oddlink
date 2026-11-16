@@ -48,7 +48,8 @@ smoke-gently-carries-blue-key
 ```bash
 git clone https://github.com/endomasayaendo/oddlink.git
 cd oddlink
-pnpm bootstrap                           # install, set up .env, start Postgres, migrate, run the dev server
+pnpm bootstrap                           # start: install, set up .env, start Postgres, migrate, run the dev server
+pnpm stop                                # stop: the dev server and Postgres (data is kept)
 ```
 
 Then open http://localhost:3000. `pnpm bootstrap` is safe to run again at any time:
@@ -59,6 +60,13 @@ Then open http://localhost:3000. `pnpm bootstrap` is safe to run again at any ti
 4. Starts the `oddlink-db` container and waits until it is healthy. A running container is reused, and a stopped one is started.
 5. Runs `pnpm db:migrate`.
 6. Starts `pnpm dev`. Pass `--no-dev` to stop after setup instead: `pnpm bootstrap --no-dev`.
+
+To stop, press Ctrl+C in the terminal running the dev server, or run `pnpm stop` from the repository root. `pnpm stop`:
+
+1. Stops the dev server that `pnpm bootstrap` started from this checkout, if it is still running (for example in another terminal). It only signals the process `pnpm bootstrap` recorded, never whatever happens to be on port 3000.
+2. Stops the `oddlink-db` container with `docker stop`. The container and its data are kept, and the next `pnpm bootstrap` starts it again.
+
+The `oddlink-db` container is shared by every checkout and worktree on this machine, so stopping it also takes Postgres away from them (their dev servers and tests fail until it is started again). Use `pnpm stop --keep-db` to stop only the dev server.
 
 Before opening a pull request, run `pnpm verify`: it runs what CI runs, in the same order (`lint` → `typecheck` → `build` without `DATABASE_URL` → `test`) and stops at the first failure. It needs Postgres running (`pnpm bootstrap` or `pnpm db:up`) and never starts anything itself.
 
@@ -147,7 +155,7 @@ Every response (pages, the short-link `302`, the `404` pages, the API) gets a st
 
 ```
 oddlink/
-├── scripts/                          bootstrap.mjs / verify.mjs (plain Node, no dependencies)
+├── scripts/                          bootstrap.mjs / stop.mjs / verify.mjs (plain Node, no dependencies)
 ├── apps/
 │   └── web/                          Next.js app
 │       ├── proxy.ts                  short-link redirects, `+` previews and the analytics 404 check (runs before routing)
@@ -181,12 +189,14 @@ Run from the repository root; Turborepo runs each task in every package that def
 
 | Command | |
 |---|---|
-| `pnpm bootstrap` | One-command local setup (see [Getting Started](#getting-started)); `--no-dev` skips starting the dev server |
+| `pnpm bootstrap` | Start: one-command local setup (see [Getting Started](#getting-started)); `--no-dev` skips starting the dev server |
+| `pnpm stop` | Stop: the dev server started by `pnpm bootstrap`, then the `oddlink-db` container (data kept); `--keep-db` leaves the database running |
 | `pnpm verify` | Run the CI checks locally: lint, typecheck, build (without `DATABASE_URL`), test. Needs Postgres running |
 | `pnpm dev` / `build` / `start` | Next.js dev server / production build / production server |
 | `pnpm lint` / `typecheck` | Lint / type check |
 | `pnpm test` | Run tests (needs `db:up`; creates `oddlink_test` automatically) |
-| `pnpm db:up` / `db:down` | Start / stop Postgres |
+| `pnpm test:scripts` | Test `scripts/stop.mjs` (uses a throwaway container; the Docker tests are skipped if Docker is not running) |
+| `pnpm db:up` / `db:down` | Create and start Postgres / remove the container (the data volume is kept) |
 | `pnpm db:generate` | Generate a migration after changing `apps/web/lib/db/schema.ts` |
 | `pnpm db:migrate` | Apply migrations |
 | `pnpm --filter web link:disable` / `link:enable` / `link:delete` `<code>` | Operator commands (see [Operator commands](#operator-commands)) |
