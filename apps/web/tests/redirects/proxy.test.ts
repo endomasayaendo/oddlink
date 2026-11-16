@@ -150,11 +150,41 @@ describe("proxy redirects", () => {
     expect(await logsOf(link.id)).toBe(1);
   });
 
-  it("counts HEAD requests like GET", async () => {
-    await insertLink("head-code", "https://example.com", future());
+  it("redirects HEAD like GET without counting or logging it", async () => {
+    const link = await insertLink("head-code", "https://example.com/target", future());
     const response = await request("/head-code", "HEAD").res;
     expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toBe("https://example.com/target");
+    expect(await countOf("head-code")).toBe(0);
+    expect(await logsOf(link.id)).toBe(0);
+  });
+
+  it("still counts a GET after a HEAD", async () => {
+    const link = await insertLink("head-code", "https://example.com/target", future());
+    await request("/head-code", "HEAD").res;
+    expect((await request("/head-code").res).status).toBe(302);
     expect(await countOf("head-code")).toBe(1);
+    expect(await logsOf(link.id)).toBe(1);
+  });
+
+  it.each([
+    ["an expired", sql`expires_at = now() - interval '1 day'`],
+    ["a disabled", sql`disabled_at = now(), disabled_by = 'operator'`],
+    ["a deleted", sql`original_url = NULL, deleted_at = now(), deleted_by = 'operator'`],
+    ["an unusable", sql`original_url = 'javascript:alert(1)'`],
+  ])("serves the 404 page for %s link on HEAD, like GET", async (_, set) => {
+    const link = await insertLink("head-code", "https://example.com/target", future());
+    await db.execute(sql`UPDATE url_mappings SET ${set} WHERE short_code = 'head-code'`);
+    expectNotFound(await request("/head-code", "HEAD").res);
+    expect(await countOf("head-code")).toBe(0);
+    expect(await logsOf(link.id)).toBe(0);
+  });
+
+  it("answers 503 on HEAD when the lookup fails", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(db, "execute").mockRejectedValueOnce(new Error("connection lost"));
+    expect((await request("/some-code", "HEAD").res).status).toBe(503);
+    expect(console.error).toHaveBeenCalled();
   });
 
   it.each(["POST", "PUT", "DELETE", "PATCH"])("answers %s with 405 without counting a click", async (method) => {

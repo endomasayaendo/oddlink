@@ -14,7 +14,7 @@ const MATRIX = readFileSync(join(import.meta.dirname, "link-readers-matrix.test.
 
 /** Files that read url_mappings, with the readers they contribute to the matrix. */
 const READERS: Record<string, string[]> = {
-  "lib/links/resolve-link.ts": ["resolveShortCode", "proxy /c"],
+  "lib/links/resolve-link.ts": ["resolveShortCode", "findActiveLink", "proxy /c", "proxy HEAD /c"],
   "lib/links/get-link-preview.ts": ["getLinkPreview", "proxy /c+", "proxy /preview/c"],
   "lib/analytics/get-analytics.ts": ["getAnalytics"],
 };
