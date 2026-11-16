@@ -34,6 +34,8 @@ const baseUrl = `http://localhost:${port}`;
 const serverEnv = {
   NODE_ENV: "production",
   NEXT_TELEMETRY_DISABLED: "1",
+  // The server runs on this machine, so production mode must be told to accept localhost URLs.
+  ALLOW_LOCAL_PRODUCTION: "1",
   BASE_URL: baseUrl,
   DATABASE_URL: databaseUrl,
   APP_TIME_ZONE: "Asia/Tokyo",
