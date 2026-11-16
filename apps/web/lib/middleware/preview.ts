@@ -2,14 +2,14 @@ import { type NextRequest, NextResponse } from "next/server";
 import { getLinkPreview } from "@/lib/links/get-link-preview";
 import { isPossibleShortCode } from "@/lib/middleware/utils/is-possible-short-code";
 import { isReservedKey } from "@/lib/middleware/utils/is-reserved-key";
-import { rewriteGone } from "@/lib/middleware/utils/rewrite-gone";
+import { serveGone } from "@/lib/middleware/utils/serve-gone";
 import { NO_STORE_CACHE_CONTROL, rewriteNotFound } from "@/lib/middleware/utils/rewrite-not-found";
 
 /**
  * Serves the preview page for `/code+` (`direct: false`, rewritten to `/preview/code`) and checks
  * direct `/preview/code` requests (`direct: true`, passed on). Both answer a code that has no
- * showable preview with the same real 404 as the short link (disabled and deleted ones with
- * `rewriteGone`, like the short link), and never count a click.
+ * showable preview with the same real 404 as the short link, a disabled or deleted one with the
+ * same 410 gone page, and never count a click.
  * `key` is `""` when the path segment couldn't be decoded.
  */
 export async function PreviewMiddleware(req: NextRequest, key: string, { direct }: { direct: boolean }) {
@@ -20,7 +20,7 @@ export async function PreviewMiddleware(req: NextRequest, key: string, { direct 
   try {
     const preview = await getLinkPreview(key);
     if (!preview) return notFound(req);
-    if (preview.state === "disabled" || preview.state === "deleted") return rewriteGone(req, preview, "/not-found");
+    if (preview.state === "disabled" || preview.state === "deleted") return serveGone(preview);
   } catch (error) {
     console.error("Failed to look up link preview", error);
     return new NextResponse(null, { status: 503, headers: { "Cache-Control": NO_STORE_CACHE_CONTROL } });
