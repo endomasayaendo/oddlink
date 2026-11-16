@@ -64,7 +64,10 @@ await expectResponse("issued code redirects", `/${ACTIVE_CODE}`, { status: 302, 
 await expectResponse("preview page", `/${ACTIVE_CODE}+`, { status: 200 });
 await expectResponse("analytics page", `/analytics/${ACTIVE_CODE}`, { status: 200 });
 await expectResponse("analytics for an unknown code", `/analytics/${UNKNOWN_CODE}`, { status: 404 });
-await expectResponse("disabled code does not redirect", `/${DISABLED_CODE}`, { status: 404 });
+await expectResponse("disabled code is gone", `/${DISABLED_CODE}`, { status: 410 });
+await expectResponse("preview for a disabled code is gone", `/${DISABLED_CODE}+`, { status: 410 });
+// A disabled link keeps its analytics page, which shows that it is disabled.
+await expectResponse("analytics for a disabled code", `/analytics/${DISABLED_CODE}`, { status: 200 });
 await stopServer(server);
 server = undefined;
 
