@@ -7,6 +7,7 @@ import { accessLog, urlMappings } from "@/lib/db/schema";
 import { NO_STORE_CACHE_CONTROL, NOT_FOUND_CACHE_CONTROL } from "@/lib/middleware/utils/rewrite-not-found";
 import { config, proxy } from "@/proxy";
 import { resetUrlTables } from "../utils/reset-db";
+import { stubGonePages } from "../utils/stub-gone-page";
 
 resetUrlTables();
 afterEach(() => vi.restoreAllMocks());
@@ -33,6 +34,20 @@ function expectNotFound(res: Response, page = "http://localhost:3000/not-found")
   expect(rewriteOf(res)).toBe(page);
   expect(res.headers.get("location")).toBeNull();
   expect(res.headers.get("cache-control")).toBe(NOT_FOUND_CACHE_CONTROL);
+}
+
+// Disabled and deleted codes get the static gone page's HTML under the requested URL: a 410,
+// uncached and not indexed, without the destination.
+async function expectGone(res: Response, page: string) {
+  expect(res.status).toBe(410);
+  expect(rewriteOf(res)).toBeNull();
+  expect(res.headers.get("location")).toBeNull();
+  expect(res.headers.get("cache-control")).toBe(NO_STORE_CACHE_CONTROL);
+  expect(res.headers.get("x-robots-tag")).toBe("noindex");
+  expect(res.headers.get("content-type")).toBe("text/html; charset=utf-8");
+  const body = await res.text();
+  expect(body).toBe(`<html>gone page ${page}</html>`);
+  expect(body).not.toContain("example.com");
 }
 
 describe("proxy redirects", () => {
@@ -102,12 +117,17 @@ describe("proxy redirects", () => {
   });
 
   it.each([
-    ["disabled", sql`disabled_at = now(), disabled_by = 'operator'`],
-    ["deleted", sql`original_url = NULL, deleted_at = now(), deleted_by = 'operator'`],
-  ])("serves the 404 page for a %s link without counting it", async (_, set) => {
+    ["disabled by the operator", sql`disabled_at = now(), disabled_by = 'operator'`, "/gone/disabled-flagged"],
+    ["deleted by the operator", sql`original_url = NULL, deleted_at = now(), deleted_by = 'operator'`, "/gone/deleted-flagged"],
+    ["disabled by the owner", sql`disabled_at = now(), disabled_by = 'owner'`, "/gone/disabled"],
+    ["deleted by the owner", sql`original_url = NULL, deleted_at = now(), deleted_by = 'owner'`, "/gone/deleted"],
+  ])("serves the 410 gone page for a link %s, without counting it", async (_, set, page) => {
     const link = await insertLink("gone-code", "https://example.com/target", future());
     await db.execute(sql`UPDATE url_mappings SET ${set} WHERE short_code = 'gone-code'`);
-    expectNotFound(await request("/gone-code").res);
+    stubGonePages();
+    for (const method of ["GET", "HEAD"]) {
+      await expectGone(await request("/gone-code", method).res, `http://localhost:3000${page}`);
+    }
     expect(await countOf("gone-code")).toBe(0);
     expect(await logsOf(link.id)).toBe(0);
   });
@@ -169,8 +189,6 @@ describe("proxy redirects", () => {
 
   it.each([
     ["an expired", sql`expires_at = now() - interval '1 day'`],
-    ["a disabled", sql`disabled_at = now(), disabled_by = 'operator'`],
-    ["a deleted", sql`original_url = NULL, deleted_at = now(), deleted_by = 'operator'`],
     ["an unusable", sql`original_url = 'javascript:alert(1)'`],
   ])("serves the 404 page for %s link on HEAD, like GET", async (_, set) => {
     const link = await insertLink("head-code", "https://example.com/target", future());
@@ -208,6 +226,21 @@ describe("proxy analytics check", () => {
   it("lets an existing code reach the analytics page", async () => {
     await insertLink("stats-code", "https://example.com", future());
     expect(passesThrough(await request("/analytics/stats-code").res)).toBe(true);
+  });
+
+  it("lets a disabled code reach the analytics page, which explains the state", async () => {
+    await insertLink("off-stats", "https://example.com", future());
+    await db.execute(sql`UPDATE url_mappings SET disabled_at = now(), disabled_by = 'automated' WHERE short_code = 'off-stats'`);
+    expect(passesThrough(await request("/analytics/off-stats").res)).toBe(true);
+  });
+
+  it("serves the 410 gone page for a deleted code", async () => {
+    await insertLink("dead-stats", "https://example.com", future());
+    await db.execute(
+      sql`UPDATE url_mappings SET original_url = NULL, deleted_at = now(), deleted_by = 'operator' WHERE short_code = 'dead-stats'`,
+    );
+    stubGonePages();
+    await expectGone(await request("/analytics/dead-stats").res, "http://localhost:3000/gone/deleted-flagged");
   });
 
   it("lets an expired code reach the analytics page", async () => {
@@ -314,6 +347,15 @@ describe("proxy preview", () => {
     const execute = vi.spyOn(db, "execute");
     expectNotFound(await request(path).res);
     expect(execute).not.toHaveBeenCalled();
+  });
+
+  it.each(["/off-code+", "/preview/off-code"])("serves the 410 gone page for %s on a disabled link", async (path) => {
+    const link = await insertLink("off-code", "https://example.com/target", future());
+    await db.execute(sql`UPDATE url_mappings SET disabled_at = now(), disabled_by = 'operator' WHERE short_code = 'off-code'`);
+    stubGonePages();
+    await expectGone(await request(path).res, "http://localhost:3000/gone/disabled-flagged");
+    expect(await countOf("off-code")).toBe(0);
+    expect(await logsOf(link.id)).toBe(0);
   });
 
   it.each(["/not-found+", "/favicon.ico+"])("serves the 404 page for %s instead of passing it on", async (path) => {
