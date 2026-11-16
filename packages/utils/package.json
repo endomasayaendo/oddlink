@@ -10,10 +10,13 @@
   },
   "scripts": {
     "test": "vitest run",
+    "lint": "eslint --max-warnings 0",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@oddlink/tsconfig": "workspace:*",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "16.4.3",
     "typescript": "^5.9.3",
     "vitest": "^5.0.5"
   }

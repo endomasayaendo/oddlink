@@ -11,6 +11,7 @@
   },
   "scripts": {
     "test": "vitest run",
+    "lint": "eslint --max-warnings 0",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -23,6 +24,8 @@
     "@testing-library/react": "^16.3.3",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "16.4.3",
     "jsdom": "^28.1.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
