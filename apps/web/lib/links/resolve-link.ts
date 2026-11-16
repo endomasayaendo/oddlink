@@ -24,6 +24,23 @@ export async function resolveShortCode(shortCode: string): Promise<ResolvedLink 
 }
 
 /**
+ * Finds the same link `resolveShortCode` would redirect to, without counting the access or
+ * writing a log row. For requests that are not clicks, such as HEAD.
+ */
+export async function findActiveLink(shortCode: string): Promise<ResolvedLink | null> {
+  const { rows } = await db.execute<{ id: string; original_url: string }>(sql`
+    SELECT id, original_url FROM url_mappings WHERE ${redirectableLink(shortCode)}
+  `);
+  const row = rows[0];
+  return row ? { id: Number(row.id), originalUrl: row.original_url } : null;
+}
+
+/** The rows both lookups may redirect to, so counting and non-counting lookups always agree. */
+function redirectableLink(shortCode: string): SQL {
+  return sql`short_code = ${shortCode} AND ${isActiveLink} AND original_url ~* '^https?:'`;
+}
+
+/**
  * The single redirect statement behind `resolveShortCode`. Exported so tests can run the exact
  * statement inside their own open transaction (link-control's concurrency test).
  */
@@ -32,9 +49,7 @@ export function redirectStatement(shortCode: string): SQL {
     WITH hit AS (
       UPDATE url_mappings
       SET access_count = access_count + 1
-      WHERE short_code = ${shortCode}
-        AND ${isActiveLink}
-        AND original_url ~* '^https?:'
+      WHERE ${redirectableLink(shortCode)}
       RETURNING id, original_url
     ),
     log AS (

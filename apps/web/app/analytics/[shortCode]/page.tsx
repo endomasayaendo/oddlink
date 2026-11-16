@@ -5,6 +5,7 @@ import { Suspense } from "react";
 import { getAnalytics } from "@/lib/analytics/get-analytics";
 import { formatDate } from "@/lib/format-date";
 import { shortCodeFromParams } from "@/lib/links/short-code-param";
+import { FLAGGED_REASON, isFlagged } from "@/lib/links/gone";
 import { StatCard } from "@/ui/analytics/stat-card";
 
 // "2026-01-02" -> "Jan 2"; the date is already in APP_TIME_ZONE, so format it as UTC.
@@ -31,8 +32,8 @@ export default function AnalyticsPage({ params }: PageProps<"/analytics/[shortCo
 async function AnalyticsContent({ params }: Pick<PageProps<"/analytics/[shortCode]">, "params">) {
   const shortCode = await shortCodeFromParams(params);
   const data = await getAnalytics(shortCode);
-  // The proxy answers disabled and deleted links before this page runs.
-  if (!data || data.state === "disabled" || data.state === "deleted") notFound();
+  // The proxy answers deleted links before this page runs.
+  if (!data || data.state === "deleted") notFound();
 
   const chartData = data.dailyAccess.map((d) => ({ date: formatDay(d.date), count: d.count }));
 
@@ -47,15 +48,26 @@ async function AnalyticsContent({ params }: Pick<PageProps<"/analytics/[shortCod
         >
           {data.shortUrl}
         </a>
-        <a
-          href={data.originalUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="block text-[0.8rem] break-all text-ink-muted"
-        >
-          {data.originalUrl}
-        </a>
+        {/* Null when the link was disabled by anyone but its owner: the destination stays hidden. */}
+        {data.originalUrl !== null && (
+          <a
+            href={data.originalUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block text-[0.8rem] break-all text-ink-muted"
+          >
+            {data.originalUrl}
+          </a>
+        )}
       </div>
+
+      {data.state === "disabled" && (
+        <div role="status" className="mb-8 rounded-wobble border-2 border-rust bg-rust-wash p-4 text-center font-semibold text-rust">
+          {isFlagged(data.disabledBy)
+            ? `This link is disabled ${FLAGGED_REASON}. It no longer redirects.`
+            : "This link is disabled. It no longer redirects."}
+        </div>
+      )}
 
       <div className="mb-8 flex flex-col gap-4 sm:flex-row">
         <StatCard label="Total Clicks" value={data.totalAccessCount} />
