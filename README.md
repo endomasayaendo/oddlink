@@ -84,6 +84,7 @@ If the port is taken, or `pnpm db:up` complains that the name `oddlink-db` is in
 |---|---|
 | `/` | Shorten a URL (Server Action) and see your recent links (stored in `localStorage`) |
 | `POST /api/issue` | Shorten a URL from anywhere else (see below) |
+| `GET /api/health` | Health check: runs `SELECT 1` against the database (see below) |
 | `GET /{shortCode}` | Handled in `proxy.ts`: counts and logs the access in one SQL statement, then `302`s to the original URL (`503` if that write fails). Unknown or expired codes get a real `404`; disabled or deleted links get `410 Gone` (a static page, `no-store`, `noindex`, never the destination) |
 | `GET /{shortCode}+` | Preview page (rewritten to `/preview/{shortCode}`): shows the destination host and full address, created / expires dates and total clicks, and a "Continue" button that goes through the short link itself. Viewing it never counts as a click. Unknown, unusable or malformed codes get a real `404`; disabled or deleted links get `410 Gone`; expired links get a page with an "Expired" banner and no button. `no-store`, `noindex`. A transparency feature for the person holding the link, not an abuse filter |
 | `/analytics/{shortCode}` | Total clicks, created / expires dates, and daily clicks. `proxy.ts` checks the code first so unknown codes get a real `404` and disabled or deleted ones `410 Gone` |
@@ -106,6 +107,16 @@ curl -X POST http://localhost:3000/api/issue \
 The request must be sent with `Content-Type: application/json` (a `charset` parameter is fine); anything else gets `415` before the body is read or the request counts toward the rate limit.
 
 Errors return `{"message": "..."}`: `400` for a blank or invalid URL (only `http`/`https` are accepted), `422` if Google Safe Browsing flags the URL (the body also carries `"advisory": "Advisory provided by Google"` and `"advisoryUrl"`), `429` with a `Retry-After` header (seconds) when the client has issued too many links recently (see [Rate limiting](#rate-limiting)), `503` if no unique phrase could be generated.
+
+### `GET /api/health`
+
+Answers `200 {"status":"ok"}` when the database responds to `SELECT 1` within 2.5 seconds, and `503 {"status":"unavailable"}` when it fails or times out. `HEAD` gives the same status with no body. Responses are `Cache-Control: no-store` and `X-Robots-Tag: noindex`, and never include error details; the cause is logged server-side. The route runs on every request (never prerendered) and does not go through `proxy.ts`.
+
+```bash
+curl -i http://localhost:3000/api/health
+```
+
+The home page never touches the database, so a monitor pointed at `/` cannot tell when short links start failing with `503`. Point an uptime monitor (UptimeRobot or similar) at `/api/health` instead. On Supabase Free, its regular requests also keep the project from being paused for inactivity.
 
 ### Safe Browsing check
 
@@ -151,7 +162,7 @@ oddlink/
 ├── apps/
 │   └── web/                          Next.js app
 │       ├── proxy.ts                  short-link redirects, `+` previews and the analytics 404 check (runs before routing)
-│       ├── app/                      routes only: home, analytics, preview, not-found, api/issue
+│       ├── app/                      routes only: home, analytics, preview, not-found, api/issue, api/health
 │       ├── lib/
 │       │   ├── middleware/           redirect / preview / analytics handling used by proxy.ts
 │       │   ├── links/                issuing, resolving and counting links
