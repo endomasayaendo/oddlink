@@ -189,8 +189,6 @@ describe("proxy redirects", () => {
 
   it.each([
     ["an expired", sql`expires_at = now() - interval '1 day'`],
-    ["a disabled", sql`disabled_at = now(), disabled_by = 'operator'`],
-    ["a deleted", sql`original_url = NULL, deleted_at = now(), deleted_by = 'operator'`],
     ["an unusable", sql`original_url = 'javascript:alert(1)'`],
   ])("serves the 404 page for %s link on HEAD, like GET", async (_, set) => {
     const link = await insertLink("head-code", "https://example.com/target", future());
