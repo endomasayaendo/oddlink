@@ -60,7 +60,7 @@ Then open http://localhost:3000. `pnpm bootstrap` is safe to run again at any ti
 5. Runs `pnpm db:migrate`.
 6. Starts `pnpm dev`. Pass `--no-dev` to stop after setup instead: `pnpm bootstrap --no-dev`.
 
-Before opening a pull request, run `pnpm verify`: it runs what CI runs, in the same order (`lint` → `typecheck` → `build` without `DATABASE_URL` → `test`) and stops at the first failure. It needs Postgres running (`pnpm bootstrap` or `pnpm db:up`) and never starts anything itself.
+Before opening a pull request, run `pnpm verify`: it runs what CI runs, in the same order (`lint` → `typecheck` → migrations match `schema.ts` → `build` without `DATABASE_URL` → `test`) and stops at the first failure. CI also smoke-tests the production build, which `pnpm verify` skips; to run it locally, build first and point it at a database that does not exist yet (it is created and migrated): `SMOKE_DATABASE_URL=postgres://postgres:postgres@localhost:5432/oddlink_smoke node scripts/ci-smoke.mjs`. It needs Postgres running (`pnpm bootstrap` or `pnpm db:up`) and never starts anything itself.
 
 ### Manual setup
 
@@ -147,7 +147,7 @@ Every response (pages, the short-link `302`, the `404` pages, the API) gets a st
 
 ```
 oddlink/
-├── scripts/                          bootstrap.mjs / verify.mjs (plain Node, no dependencies)
+├── scripts/                          bootstrap.mjs / verify.mjs (plain Node, no dependencies), ci-smoke.mjs (production smoke test)
 ├── apps/
 │   └── web/                          Next.js app
 │       ├── proxy.ts                  short-link redirects, `+` previews and the analytics 404 check (runs before routing)
@@ -182,16 +182,16 @@ Run from the repository root; Turborepo runs each task in every package that def
 | Command | |
 |---|---|
 | `pnpm bootstrap` | One-command local setup (see [Getting Started](#getting-started)); `--no-dev` skips starting the dev server |
-| `pnpm verify` | Run the CI checks locally: lint, typecheck, build (without `DATABASE_URL`), test. Needs Postgres running |
+| `pnpm verify` | Run the CI checks locally: lint, typecheck, migrations match the schema, build (without `DATABASE_URL`), test. Needs Postgres running |
 | `pnpm dev` / `build` / `start` | Next.js dev server / production build / production server |
-| `pnpm lint` / `typecheck` | Lint / type check |
+| `pnpm lint` / `typecheck` | Lint (fails on warnings; covers every package and `scripts/`) / type check |
 | `pnpm test` | Run tests (needs `db:up`; creates `oddlink_test` automatically) |
 | `pnpm db:up` / `db:down` | Start / stop Postgres |
 | `pnpm db:generate` | Generate a migration after changing `apps/web/lib/db/schema.ts` |
 | `pnpm db:migrate` | Apply migrations |
 | `pnpm --filter web link:disable` / `link:enable` / `link:delete` `<code>` | Operator commands (see [Operator commands](#operator-commands)) |
 
-CI (GitHub Actions) runs lint, typecheck, build and test on every pull request and push to `main`.
+CI (GitHub Actions) runs lint, typecheck, a check that the committed migrations match `schema.ts`, build, a smoke test of the production server (`scripts/ci-smoke.mjs`) and test on every pull request and push to `main`.
 
 ### Operator commands
 

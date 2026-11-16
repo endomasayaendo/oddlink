@@ -40,11 +40,30 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: pnpm
+      # Next's incremental build cache. Restored before install, so the source hash never sees node_modules.
+      - uses: actions/cache@v6
+        with:
+          path: apps/web/.next/cache
+          key: nextjs-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ hashFiles('apps/web/**/*.ts', 'apps/web/**/*.tsx', 'apps/web/**/*.css', 'packages/**/*.ts', 'packages/**/*.tsx', 'packages/**/*.css') }}
+          restore-keys: |
+            nextjs-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm typecheck
+      - name: Check migrations match schema.ts
+        run: |
+          pnpm --filter web exec drizzle-kit generate
+          if [ -n "$(git status --porcelain apps/web/drizzle)" ]; then
+            git status --porcelain apps/web/drizzle
+            echo "::error::apps/web/lib/db/schema.ts has changes with no migration. Run pnpm db:generate and commit the result."
+            exit 1
+          fi
       # Deliberately no DATABASE_URL: a build-time DB read should fail loudly here.
       - run: pnpm build
+      - name: Smoke test the production build
+        run: node scripts/ci-smoke.mjs
+        env:
+          SMOKE_DATABASE_URL: postgres://postgres:postgres@localhost:5432/oddlink_smoke
       - run: pnpm test
         env:
           TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/oddlink_test

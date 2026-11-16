@@ -1,4 +1,4 @@
-// Shared helpers for scripts/bootstrap.mjs and scripts/verify.mjs.
+// Shared helpers for the scripts in this folder.
 // Node built-ins only: this runs before (and without) `pnpm install`.
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
