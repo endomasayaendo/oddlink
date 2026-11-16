@@ -36,6 +36,13 @@
       "when": 1794743212773,
       "tag": "0004_link_state",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794830784162,
+      "tag": "0005_access_log_composite_index",
+      "breakpoints": true
     }
   ]
 }

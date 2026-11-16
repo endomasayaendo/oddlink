@@ -52,7 +52,8 @@ export const accessLog = pgTable(
       .references(() => urlMappings.id, { onDelete: "restrict" }),
     accessedAt: timestamp("accessed_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("idx_access_log_url_mapping_id").on(t.urlMappingId), index("idx_access_log_accessed_at").on(t.accessedAt)],
+  // Leading url_mapping_id serves per-link lookups (deletes, FK checks); accessed_at orders a link's rows by time.
+  (t) => [index("idx_access_log_url_mapping_id_accessed_at").on(t.urlMappingId, t.accessedAt)],
 );
 
 const wordTable = (name: string) =>
