@@ -82,10 +82,15 @@ export async function enableLink(shortCode: string, principal: Principal): Promi
  * that row and leave it behind. Statement (1) takes the row lock, so redirects after it wait and
  * then fail isActiveLink; statement (2) starts with a fresh snapshot that sees every log row
  * committed before the lock was ours.
+ *
+ * Both statements run under DELETE_TIMEOUTS instead of the pool's statement timeout. While the
+ * transaction runs, redirects to this link wait for its row lock (and fail at their own statement
+ * timeout); a link disabled beforehand is skipped by redirects without waiting.
  */
 export async function deleteLink(shortCode: string, principal: DeletePrincipal): Promise<ControlResult> {
   const actor = supportedActor(principal);
   return db.transaction(async (tx) => {
+    await tx.execute(DELETE_TIMEOUTS);
     // (1) Tombstone.
     const { rows } = await tx.execute<{ outcome: Outcome; id: string | null }>(
       controlStatement(
@@ -101,6 +106,18 @@ export async function deleteLink(shortCode: string, principal: DeletePrincipal):
     return toResult(outcome === "deleted" ? "unchanged" : outcome);
   });
 }
+
+/**
+ * Timeouts for the delete transaction. The log DELETE grows with the link's traffic and may need far
+ * longer than the pool's statement timeout, which would roll back the whole delete; five minutes
+ * still ends a runaway statement. Waiting for a lock keeps a five-second bound, so the delete gives
+ * up rather than queue behind a long-held row lock. `set_config(..., true)` is `SET LOCAL`: both
+ * revert when the transaction ends, so the connection returns to the pool with its usual timeouts,
+ * also behind a transaction-mode pooler.
+ */
+const DELETE_TIMEOUTS = sql`
+  SELECT set_config('statement_timeout', '5min', true), set_config('lock_timeout', '5s', true)
+`;
 
 async function mutate(shortCode: string, set: SQL, rule: SQL, ruleFailed: SQL): Promise<Outcome> {
   const { rows } = await db.execute<{ outcome: Outcome }>(controlStatement(shortCode, set, rule, ruleFailed));

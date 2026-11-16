@@ -309,6 +309,89 @@ describe("deleteLink tombstone", () => {
   });
 });
 
+describe("deleteLink timeouts", () => {
+  // Far below how long the slowed log DELETE takes, standing in for the pool's statement timeout.
+  const TIGHT = "100ms";
+
+  afterEach(async () => {
+    await db.execute(sql`DROP TRIGGER IF EXISTS slow_access_log_delete ON access_log`);
+    await db.execute(sql`DROP FUNCTION IF EXISTS slow_access_log_delete()`);
+  });
+
+  /** Makes every DELETE on access_log take at least half a second. */
+  async function slowLogDeletes() {
+    await db.execute(sql`
+      CREATE FUNCTION slow_access_log_delete() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN PERFORM pg_sleep(0.5); RETURN NULL; END $$
+    `);
+    await db.execute(sql`
+      CREATE TRIGGER slow_access_log_delete BEFORE DELETE ON access_log
+      FOR EACH STATEMENT EXECUTE FUNCTION slow_access_log_delete()
+    `);
+  }
+
+  type Settings = { statement_timeout: string; lock_timeout: string };
+  const SETTINGS = "SELECT current_setting('statement_timeout') AS statement_timeout, current_setting('lock_timeout') AS lock_timeout";
+
+  /**
+   * Starts every db.transaction with the tight statement timeout and records the timeouts in effect
+   * just before it commits.
+   */
+  function tightTransactions() {
+    const seen: Settings[] = [];
+    const transaction = db.transaction.bind(db);
+    vi.spyOn(db, "transaction").mockImplementation(((fn: Parameters<typeof db.transaction>[0]) =>
+      transaction(async (tx) => {
+        await tx.execute(sql.raw(`SET LOCAL statement_timeout = '${TIGHT}'`));
+        const result = await fn(tx);
+        seen.push((await tx.execute<Settings>(sql.raw(SETTINGS))).rows[0]);
+        return result;
+      })) as typeof db.transaction);
+    return seen;
+  }
+
+  it("the slowed log DELETE alone exceeds the tight timeout", async () => {
+    await setup("active");
+    await slowLogDeletes();
+    const attempt = db.transaction(async (tx) => {
+      await tx.execute(sql.raw(`SET LOCAL statement_timeout = '${TIGHT}'`));
+      await tx.execute(sql`DELETE FROM access_log WHERE url_mapping_id IN (SELECT id FROM url_mappings WHERE short_code = ${CODE})`);
+    });
+    // 57014: query_canceled (statement timeout).
+    await expect(attempt).rejects.toMatchObject({ cause: { code: "57014" } });
+    expect(await readRow(CODE)).toMatchObject({ summary: "active", logs: LOGS });
+  });
+
+  it("completes when the log DELETE outlasts the statement timeout the transaction started with", async () => {
+    await setup("active");
+    await slowLogDeletes();
+    const seen = tightTransactions();
+
+    expect(await deleteLink(CODE, { actor: "operator" })).toEqual(ok(true));
+
+    expect(seen).toEqual([{ statement_timeout: "5min", lock_timeout: "5s" }]);
+    expect(await readRow(CODE)).toMatchObject({ summary: "deleted:operator", originalUrl: null, accessCount: 0, logs: 0 });
+    await expectInvariants();
+  });
+
+  it("returns every pooled connection with the pool's timeouts", async () => {
+    await setup("active");
+    await deleteLink(CODE, { actor: "operator" });
+
+    const pool = db.$client;
+    // Holding as many clients as the pool has checks every connection, including the one used above.
+    const clients = await Promise.all(Array.from({ length: pool.totalCount }, () => pool.connect()));
+    try {
+      for (const client of clients) {
+        const { rows } = await client.query<Settings>(SETTINGS);
+        expect(rows[0]).toEqual({ statement_timeout: "5s", lock_timeout: "0" });
+      }
+    } finally {
+      for (const client of clients) client.release();
+    }
+  });
+});
+
 describe("disable/enable racing a concurrent state change", () => {
   // Another transaction changes the row and commits while the control statement waits for its lock.
   // The result must describe the row version the statement locked, never the stale one in its start
