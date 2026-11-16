@@ -1,8 +1,9 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Client } from "pg";
+import { TEST_CLOCK_SETUP_SQL } from "./utils/test-clock";
 
-// Creates the test database if needed and applies migrations once per run.
+// Creates the test database if needed, applies migrations and resets the test clock once per run.
 export default async function setup() {
   const url = new URL(process.env.TEST_DATABASE_URL!);
   const dbName = url.pathname.slice(1);
@@ -16,5 +17,6 @@ export default async function setup() {
   const client = new Client({ connectionString: url.toString() });
   await client.connect();
   await migrate(drizzle(client), { migrationsFolder: "./drizzle" });
+  await client.query(TEST_CLOCK_SETUP_SQL);
   await client.end();
 }

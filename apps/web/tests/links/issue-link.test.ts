@@ -34,13 +34,21 @@ describe("issueShortUrl", () => {
     expect(row).toMatchObject({ originalUrl: "https://example.com/saved", accessCount: 0 });
   });
 
-  it("sets the expiry about one year ahead", async () => {
+  it("sets the expiry one calendar year ahead on the database clock", async () => {
+    // Postgres interval arithmetic is the reference, so leap days and DST shifts match the app.
+    const oneYearFromNowMs = async () => {
+      const { rows } = await db.execute<{ ms: string }>(
+        sql`SELECT floor(extract(epoch FROM now() + interval '1 year') * 1000)::bigint AS ms`,
+      );
+      return Number(rows[0].ms);
+    };
+    const before = await oneYearFromNowMs();
     const result = await issueShortUrl("https://example.com");
+    const after = await oneYearFromNowMs();
     if (!result.ok) throw new Error("issue failed");
-    const row = await findByCode(result.shortCode);
-    const oneYear = new Date();
-    oneYear.setFullYear(oneYear.getFullYear() + 1);
-    expect(Math.abs(row!.expiresAt!.getTime() - oneYear.getTime())).toBeLessThan(60_000);
+    const expiresAt = (await findByCode(result.shortCode))!.expiresAt!;
+    expect(expiresAt.getTime()).toBeGreaterThanOrEqual(before);
+    expect(expiresAt.getTime()).toBeLessThanOrEqual(after);
   });
 
   it("retries with a new phrase when the code already exists", async () => {
@@ -230,11 +238,12 @@ describe("issueShortUrl", () => {
     });
 
     it("enforces the configured limit end to end", async () => {
-      // vitest.config.mts sets ISSUE_RATE_LIMIT_MAX=1000; prefill the shared bucket to just below it.
+      // vitest.config.mts sets ISSUE_RATE_LIMIT_MAX=1000 and a window far longer than the test;
+      // prefill the current window of the shared bucket to just below the limit.
       await db.insert(rateLimits).values({
         scope: "issue",
         key: clientKey("192.0.2.9", process.env.RATE_LIMIT_SECRET!),
-        windowStart: sql`date_bin(interval '60 seconds', now(), timestamptz 'epoch')`,
+        windowStart: sql`date_bin(make_interval(secs => ${Number(process.env.ISSUE_RATE_LIMIT_WINDOW_SECONDS)}::int), now(), timestamptz 'epoch')`,
         count: 999,
       });
       const checkUrl = vi.fn(async () => "safe" as const);
