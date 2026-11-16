@@ -226,14 +226,24 @@ Set in `apps/web/.env`, or in the shell (`turbo.json` passes these through to th
 
 | Variable | Default | Required | Description |
 |----------|---------|----------|-------------|
-| `DATABASE_URL` | — | In production | Postgres connection string (`postgres://` or `postgresql://`) |
-| `BASE_URL` | `http://localhost:3000` | In production | Absolute `http`/`https` URL used in generated short links; no credentials, query or fragment; trailing slashes are removed |
+| `DATABASE_URL` | — | In production | Postgres connection string (`postgres://` or `postgresql://`). In production it must not point to this machine (see below) |
+| `BASE_URL` | `http://localhost:3000` | In production | Absolute `http`/`https` URL used in generated short links; no credentials, query or fragment; trailing slashes are removed. In production it must be `https` and must not point to this machine (see below) |
 | `SAFE_BROWSING_API_KEY` | — | In production | Google Safe Browsing API key used to refuse phishing/malware URLs when issuing. Without it (dev, tests) the check is skipped with one warning |
 | `RATE_LIMIT_SECRET` | dev-only value | In production | Secret (32+ characters, e.g. `openssl rand -hex 32`) used to HMAC client addresses for rate limiting |
 | `ISSUE_RATE_LIMIT_MAX` | dev-only value | In production | Links one client may issue per window (positive integer) |
 | `ISSUE_RATE_LIMIT_WINDOW_SECONDS` | dev-only value | In production | Rate-limit window length in seconds (positive integer) |
+| `ALLOW_LOCAL_PRODUCTION` | — | No | `1` lets a production build run on your machine with local `BASE_URL` / `DATABASE_URL` (see below). An error on Vercel; never set it in a deploy environment |
 | `APP_TIME_ZONE` | `Asia/Tokyo` | No | IANA time zone name (e.g. `Asia/Tokyo`, `UTC`) for daily click counts and dates; offsets like `+09:00` are rejected |
 | `TEST_DATABASE_URL` | — | For `pnpm test` | Database used by the tests (not read by the app) |
 | `DB_NAME` / `DB_USERNAME` / `DB_PASSWORD` | `oddlink` / `postgres` / `postgres` | No | Used by `apps/web/docker-compose.yml` |
 
 The app validates these at startup (`apps/web/lib/env.ts`). In production (`next start`), a missing `BASE_URL`, `DATABASE_URL`, `SAFE_BROWSING_API_KEY`, `RATE_LIMIT_SECRET`, `ISSUE_RATE_LIMIT_MAX` or `ISSUE_RATE_LIMIT_WINDOW_SECONDS`, or any malformed value, prints every problem and exits. In development and tests, missing values fall back to the defaults. `next build` needs none of them.
+
+Production also refuses local URLs, so values copied from `.env.example` into a deploy environment fail at startup instead of issuing `localhost` short links: `BASE_URL` must use `https`, and neither `BASE_URL` nor `DATABASE_URL` may point to this machine (`localhost`, `*.localhost`, `127.0.0.0/8`, `0.0.0.0`, `::1`, `::`, or for the database an empty host or a Unix socket). To try a production build locally, opt in explicitly:
+
+```bash
+pnpm build
+ALLOW_LOCAL_PRODUCTION=1 pnpm start      # or uncomment it in apps/web/.env
+```
+
+`ALLOW_LOCAL_PRODUCTION=1` lifts only these local-URL rules; everything else (the required variables, URL shapes) is still checked. Only the exact value `1` is accepted, and when Vercel's system variables (`VERCEL`, `VERCEL_ENV`) are present it is itself an error, at build and at startup, so it cannot switch the rules off in a Vercel deployment.
