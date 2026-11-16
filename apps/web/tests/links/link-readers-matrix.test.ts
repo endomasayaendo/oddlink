@@ -113,7 +113,10 @@ async function viaProxy(path: string, notFoundPage: string): Promise<{ outcome: 
     return { outcome: "gone", seen };
   }
   if (res.status === 302) return { outcome: "redirect", seen };
-  if (rewrite === `http://localhost:3000${notFoundPage}`) return { outcome: "not-found", seen };
+  if (rewrite === `http://localhost:3000${notFoundPage}`) {
+    expect(res.headers.get("cache-control")).toBe(NOT_FOUND_CACHE_CONTROL);
+    return { outcome: "not-found", seen };
+  }
   if (rewrite === `http://localhost:3000/preview/${CODE}`) return { outcome: "preview", seen };
   if (res.headers.get("x-middleware-next") === "1") return { outcome: "pass", seen };
   throw new Error(`unexpected proxy response ${res.status} ${seen}`);
