@@ -16,6 +16,22 @@ const BLOCKED_THREAT_TYPES = new Set([
 
 const MAX_CACHE_DURATION_MS = 30 * 60 * 1000;
 
+/**
+ * Statuses that mean the lookup will keep failing until someone changes the key, the Google Cloud
+ * project or its quota, rather than a transient outage. Google answers an unknown API key with 400
+ * (INVALID_ARGUMENT, reason API_KEY_INVALID), a missing, restricted or revoked key or a disabled API
+ * with 403 (PERMISSION_DENIED), and an exhausted quota with 429 (RESOURCE_EXHAUSTED).
+ */
+const CONFIG_ERROR_CAUSES: Record<number, string> = {
+  400: "invalid_key_or_request",
+  401: "access_denied",
+  403: "access_denied",
+  429: "quota_exceeded",
+};
+
+/** At most one configuration error log per cause in this window; repeats inside it are warnings. */
+const CONFIG_ERROR_LOG_INTERVAL_MS = 60 * 1000;
+
 export type ClientOptions = {
   apiKey: string;
   userAgent: string;
@@ -44,6 +60,25 @@ export function createSafeBrowsingClient({
   maxCacheEntries = 5000,
 }: ClientOptions) {
   const cache = new Map<string, CacheEntry>();
+  const lastConfigErrorAt = new Map<string, number>();
+
+  /**
+   * `console.error` with a fixed `outcome=config_error cause=<cause>` message for statuses in
+   * CONFIG_ERROR_CAUSES, once per cause per interval; anything else, and repeats within the
+   * interval, is a `console.warn`. Neither includes the key or the URL being checked.
+   */
+  function logHttpError(status: number, durationMs: number) {
+    const cause = CONFIG_ERROR_CAUSES[status];
+    if (cause) {
+      const last = lastConfigErrorAt.get(cause);
+      if (last === undefined || now() - last >= CONFIG_ERROR_LOG_INTERVAL_MS) {
+        lastConfigErrorAt.set(cause, now());
+        console.error(`safe_browsing outcome=config_error cause=${cause}`, { status, durationMs });
+        return;
+      }
+    }
+    console.warn("safe_browsing outcome=error", { status, durationMs });
+  }
 
   function cached(prefix: string): CacheEntry | undefined {
     const entry = cache.get(prefix);
@@ -74,7 +109,7 @@ export function createSafeBrowsingClient({
         cache: "no-store",
       });
       if (!response.ok) {
-        console.warn("safe_browsing outcome=error", { status: response.status, durationMs: now() - started });
+        logHttpError(response.status, now() - started);
         return null;
       }
       const parsed = decodeSearchHashesResponse(new Uint8Array(await response.arrayBuffer()));
