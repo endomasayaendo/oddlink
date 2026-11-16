@@ -11,7 +11,7 @@ function subscribeReducedMotion(onChange: () => void) {
 }
 
 /**
- * A-3, "the underside": the moment a link is issued, the page turns over to a dark, rust-brown
+ * "The underside": the moment a link is issued, the page turns over to a dark, rust-brown
  * underside for under half a second and comes back. Mount it with a key per issued code so it
  * plays exactly once per link; it removes itself when its animation ends.
  *

@@ -162,6 +162,7 @@ oddlink/
 │       │   └── db/                   Drizzle schema and client
 │       ├── ui/                       app-specific components, by feature
 │       ├── drizzle/                  SQL migrations (schema + seed words)
+│       ├── scripts/                  operator CLI (link:disable / link:enable / link:delete, run with tsx)
 │       └── tests/                    integration tests, by feature
 └── packages/
     ├── ui/                           @oddlink/ui: ErrorMessage, useCopy, charts
@@ -188,8 +189,34 @@ Run from the repository root; Turborepo runs each task in every package that def
 | `pnpm db:up` / `db:down` | Start / stop Postgres |
 | `pnpm db:generate` | Generate a migration after changing `apps/web/lib/db/schema.ts` |
 | `pnpm db:migrate` | Apply migrations |
+| `pnpm --filter web link:disable` / `link:enable` / `link:delete` `<code>` | Operator commands (see [Operator commands](#operator-commands)) |
 
 CI (GitHub Actions) runs lint, typecheck, build and test on every pull request and push to `main`.
+
+### Operator commands
+
+Take a short link out of service, put it back, or delete it, acting as the operator (the highest-ranked actor: it can clear any disable, and no one else can undo its disable). There is no admin web page; these run against the database directly.
+
+```bash
+pnpm --filter web link:disable <code>         # stop redirecting
+pnpm --filter web link:enable <code>          # undo a disable (any actor's)
+pnpm --filter web link:delete <code>          # irreversible: asks you to type the code to confirm
+pnpm --filter web link:delete --yes <code>    # skip the prompt (required when not in a terminal)
+```
+
+`<code>` is a short code (`golden-clock-whispers`) or a pasted short link (`http://localhost:3000/golden-clock-whispers`, its `+` preview link, or its `/analytics/…` or `/preview/…` page); any other path is rejected, and the host is not checked, so a pasted production link still acts on whichever database `DATABASE_URL` points to. Delete keeps the row as a tombstone so the phrase is never issued again, clears its URL and count, and removes its access logs; it cannot be undone. Without a terminal and without `--yes`, delete refuses.
+
+Each run prints one line (`disabled: <code>`, `already disabled: <code>`, `not found: <code>`, …) and never the destination URL or connection details. Exit codes: `0` done or already in that state, `1` not found / deleted / not allowed / confirmation mismatch / database error, `2` usage error (including a refused delete or a missing `DATABASE_URL`). `pnpm --filter` reports every failure as `1`; a script that needs the exact code can run `pnpm -C apps/web link:disable <code>` instead.
+
+The commands read `DATABASE_URL` from `apps/web/.env`, like `pnpm db:migrate`; a value set in the shell takes precedence. To act on production, pass its URL for that one command, without writing it into your shell history:
+
+```bash
+read -rs DATABASE_URL && export DATABASE_URL   # paste the URL; nothing is echoed
+pnpm --filter web link:disable <code>
+unset DATABASE_URL
+```
+
+`DATABASE_URL=postgres://… pnpm --filter web link:disable <code>` also works, but leaves the credentials in your shell history unless your shell skips commands that start with a space (zsh `setopt HIST_IGNORE_SPACE`, bash `HISTCONTROL=ignorespace`) and you prefix one. Never put production credentials in `apps/web/.env` of a working copy.
 
 ---
 

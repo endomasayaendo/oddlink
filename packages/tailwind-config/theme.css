@@ -119,7 +119,7 @@
 }
 
 /*
- * A-2 fog: pale banks of mist rising from the bottom. Always placed behind the content (-z-10),
+ * Fog: pale banks of mist rising from the bottom. Always placed behind the content (-z-10),
  * so it only ever lightens what sits under dark text and never veils text or buttons.
  */
 @utility fog {
@@ -131,7 +131,7 @@
     linear-gradient(to top, rgb(250 247 239 / 0.85), transparent 60%);
 }
 
-/* A-2 rust: blotchy rust creeping in from all four corners, broken up by the noise mask. */
+/* Rust: blotchy rust creeping in from all four corners, broken up by the noise mask. */
 @utility rust-corners {
   background:
     radial-gradient(circle at 0 0, color-mix(in srgb, var(--color-rust-deep) 62%, transparent), color-mix(in srgb, var(--color-rust) 30%, transparent) 70px, transparent 190px),

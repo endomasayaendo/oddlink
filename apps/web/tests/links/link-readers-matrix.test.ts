@@ -10,6 +10,9 @@ import { resolveShortCode } from "@/lib/links/resolve-link";
 import { type GoneVariant } from "@/lib/links/gone";
 import { serveGone } from "@/lib/middleware/utils/serve-gone";
 import { NO_STORE_CACHE_CONTROL, NOT_FOUND_CACHE_CONTROL } from "@/lib/middleware/utils/rewrite-not-found";
+import { findActiveLink, resolveShortCode } from "@/lib/links/resolve-link";
+import { rewriteGone } from "@/lib/middleware/utils/rewrite-gone";
+import { NOT_FOUND_CACHE_CONTROL } from "@/lib/middleware/utils/rewrite-not-found";
 import { proxy } from "@/proxy";
 import { resetUrlTables } from "../utils/reset-db";
 import { stubGonePages } from "../utils/stub-gone-page";
@@ -54,7 +57,9 @@ type Fixture = keyof typeof fixtures;
 
 type Reader =
   | "resolveShortCode"
+  | "findActiveLink"
   | "proxy /c"
+  | "proxy HEAD /c"
   | "proxy /c+"
   | "proxy /preview/c"
   | "proxy /analytics/c"
@@ -86,7 +91,9 @@ const byState = {
 
 const expected: Record<Reader, Record<Fixture, Outcome>> = {
   resolveShortCode: live("hit", "miss", "miss"),
+  findActiveLink: live("hit", "miss", "miss"),
   "proxy /c": live("redirect", "not-found", "gone"),
+  "proxy HEAD /c": live("redirect", "not-found", "gone"),
   "proxy /c+": live("preview", "preview", "gone"),
   "proxy /preview/c": live("pass", "pass", "gone"),
   // A disabled link keeps its analytics page (with a banner); only a tombstone is gone.
@@ -100,8 +107,8 @@ const expected: Record<Reader, Record<Fixture, Outcome>> = {
   getLinkPreview: byState,
 };
 
-async function viaProxy(path: string, notFoundPage: string): Promise<{ outcome: Outcome; seen: string }> {
-  const res = await proxy(new NextRequest(`http://localhost:3000${path}`));
+async function viaProxy(path: string, notFoundPage: string, method = "GET"): Promise<{ outcome: Outcome; seen: string }> {
+  const res = await proxy(new NextRequest(`http://localhost:3000${path}`, { method }));
   const rewrite = res.headers.get("x-middleware-rewrite");
   const seen = JSON.stringify([...res.headers]) + (await res.text());
   if (vi.mocked(serveGone).mock.calls.length > 0) {
@@ -127,7 +134,12 @@ const run: Record<Reader, () => Promise<{ outcome: Outcome; seen: string }>> = {
     const link = await resolveShortCode(CODE);
     return { outcome: link ? "hit" : "miss", seen: JSON.stringify(link) };
   },
+  findActiveLink: async () => {
+    const link = await findActiveLink(CODE);
+    return { outcome: link ? "hit" : "miss", seen: JSON.stringify(link) };
+  },
   "proxy /c": () => viaProxy(`/${CODE}`, "/not-found"),
+  "proxy HEAD /c": () => viaProxy(`/${CODE}`, "/not-found", "HEAD"),
   "proxy /c+": () => viaProxy(`/${CODE}+`, "/not-found"),
   "proxy /preview/c": () => viaProxy(`/preview/${CODE}`, "/not-found"),
   "proxy /analytics/c": () => viaProxy(`/analytics/${CODE}`, "/analytics/not-found"),
@@ -154,6 +166,8 @@ const goneVariants: Partial<Record<Fixture, GoneVariant>> = {
   "deleted-operator": "deleted-flagged",
   "deleted-owner": "deleted",
 };
+// The only readers that count a click and write an access log row.
+const counts = (reader: Reader) => reader === "resolveShortCode" || reader === "proxy /c";
 
 // Where a disabled or deleted link may still show its destination: only analytics, and only for
 // the owner's own disable.
@@ -176,8 +190,8 @@ describe("link readers × link states", () => {
     if (!live && !mayShowDestination(reader, fixture)) {
       expect(result.seen).not.toContain("destination.example");
     }
-    if (!live) {
-      // Disabled and deleted: no count, no log, whichever reader ran.
+    if (!live || !counts(reader)) {
+      // Disabled and deleted: no count, no log, whichever reader ran; any state for a non-counting reader.
       const [row] = await db.select({ count: urlMappings.accessCount }).from(urlMappings).where(eq(urlMappings.shortCode, CODE));
       expect(row.count).toBe(0);
       expect(await db.$count(accessLog)).toBe(0);

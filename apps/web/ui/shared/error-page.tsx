@@ -12,7 +12,7 @@ type Props = {
 
 const stillWhenReduced = "motion-reduce:animate-none";
 
-// A-2, "fog and rust": the deepest level of the eerie layer, shared by every not-found and error page.
+// "Fog and rust": the deepest level of the eerie layer, shared by every not-found and error page.
 // Layers, back to front: old paper, the sinking sun, rust, fog, then the content. Fog and rust
 // stay behind the content so text and the button keep their resting contrast at every frame.
 export function ErrorPage({ code, message, action }: Props) {

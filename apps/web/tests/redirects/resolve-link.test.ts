@@ -2,7 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { db } from "@/lib/db";
 import { accessLog, urlMappings } from "@/lib/db/schema";
-import { resolveShortCode, toRedirectUrl } from "@/lib/links/resolve-link";
+import { findActiveLink, resolveShortCode, toRedirectUrl } from "@/lib/links/resolve-link";
 import { resetUrlTables } from "../utils/reset-db";
 
 resetUrlTables();
@@ -104,6 +104,42 @@ describe("resolveShortCode", () => {
     await Promise.all(Array.from({ length: 10 }, () => resolveShortCode("busy-code")));
     expect(await countOf("busy-code")).toBe(10);
     expect(await logsOf(link.id)).toBe(10);
+  });
+});
+
+describe("findActiveLink", () => {
+  it("returns the link resolveShortCode would without counting or logging it", async () => {
+    const link = await insertLink("look-code", "https://example.com", future());
+    expect(await findActiveLink("look-code")).toEqual({ id: link.id, originalUrl: "https://example.com" });
+    expect(await countOf("look-code")).toBe(0);
+    expect(await logsOf(link.id)).toBe(0);
+  });
+
+  it("treats a missing expiry as never expiring", async () => {
+    await insertLink("forever-code", "https://example.com", null);
+    expect(await findActiveLink("forever-code")).not.toBeNull();
+  });
+
+  it("returns null for an unknown code", async () => {
+    expect(await findActiveLink("missing-code")).toBeNull();
+  });
+
+  it.each([
+    ["expired", sql`expires_at = now() - interval '1 day'`],
+    ["disabled", sql`disabled_at = now(), disabled_by = 'operator'`],
+    ["deleted", sql`original_url = NULL, access_count = 0, deleted_at = now(), deleted_by = 'operator'`],
+    ["stored with a non-http(s) URL", sql`original_url = 'javascript:alert(1)'`],
+  ])("returns null for a link %s, like resolveShortCode", async (_, set) => {
+    await insertLink("gone-code", "https://example.com", future());
+    await db.execute(sql`UPDATE url_mappings SET ${set} WHERE short_code = 'gone-code'`);
+    expect(await findActiveLink("gone-code")).toBeNull();
+    expect(await resolveShortCode("gone-code")).toBeNull();
+  });
+
+  it("accepts the same odd http(s) spellings as resolveShortCode", async () => {
+    const link = await insertLink("odd-code", "https://example.com", future());
+    await corrupt("odd-code", "HTTPS:example.com");
+    expect(await findActiveLink("odd-code")).toEqual({ id: link.id, originalUrl: "HTTPS:example.com" });
   });
 });
 
