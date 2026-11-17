@@ -22,6 +22,25 @@ describe("createPool", () => {
     expect(pool.options.statement_timeout).toBe(5000);
   });
 
+  it("keeps the pool small and closes idle connections quickly", () => {
+    const pool = newPool();
+    expect(pool.options.max).toBe(5);
+    expect(pool.options.idleTimeoutMillis).toBe(5000);
+  });
+
+  it("connects without TLS when DATABASE_CA_CERT is unset", () => {
+    expect(newPool().options.ssl).toBe(false);
+  });
+
+  it("works off Vercel with attachDatabasePool installed", async () => {
+    const pool = newPool();
+    expect(pool.listenerCount("release")).toBeGreaterThan(0);
+    const client = await pool.connect();
+    client.release();
+    const { rows } = await pool.query("SELECT 1 AS one");
+    expect(rows[0].one).toBe(1);
+  });
+
   it("logs pool errors without leaking secrets", () => {
     const pool = newPool();
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});

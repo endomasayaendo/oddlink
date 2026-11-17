@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { createTlsFixtures } from "./db/tls-fixtures";
 
 // getEnv() memoizes per module instance, so each case loads a fresh copy after stubbing the env.
 async function load() {
@@ -43,6 +44,7 @@ describe("checkEnvAtStartup", () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("BASE_URL", "https://oddl.ink");
     vi.stubEnv("DATABASE_URL", "postgres://u:p@h/db");
+    vi.stubEnv("DATABASE_CA_CERT", createTlsFixtures().caPem);
     vi.stubEnv("SAFE_BROWSING_API_KEY", "test-key");
     vi.stubEnv("RATE_LIMIT_SECRET", "x".repeat(32));
     vi.stubEnv("ISSUE_RATE_LIMIT_MAX", "5");
@@ -57,6 +59,7 @@ describe("checkEnvAtStartup", () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("BASE_URL", "https://oddl.ink");
     vi.stubEnv("DATABASE_URL", "postgres://u:p@h/db");
+    vi.stubEnv("DATABASE_CA_CERT", createTlsFixtures().caPem);
     vi.stubEnv("SAFE_BROWSING_API_KEY", "");
     const exit = vi.spyOn(process, "exit").mockImplementation((() => undefined) as never);
     const log = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -70,6 +73,7 @@ describe("checkEnvAtStartup", () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("BASE_URL", "https://oddl.ink");
     vi.stubEnv("DATABASE_URL", "postgres://u:p@h/db");
+    vi.stubEnv("DATABASE_CA_CERT", createTlsFixtures().caPem);
     vi.stubEnv("SAFE_BROWSING_API_KEY", "test-key");
     vi.stubEnv("RATE_LIMIT_SECRET", "short-secret-value");
     vi.stubEnv("ISSUE_RATE_LIMIT_MAX", "");

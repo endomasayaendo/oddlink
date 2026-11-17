@@ -48,7 +48,8 @@ smoke-gently-carries-blue-key
 ```bash
 git clone https://github.com/endomasayaendo/oddlink.git
 cd oddlink
-pnpm bootstrap                           # install, set up .env, start Postgres, migrate, run the dev server
+pnpm bootstrap                           # start: install, set up .env, start Postgres, migrate, run the dev server
+pnpm stop                                # stop: the dev server and Postgres (data is kept)
 ```
 
 Then open http://localhost:3000. `pnpm bootstrap` is safe to run again at any time:
@@ -59,6 +60,13 @@ Then open http://localhost:3000. `pnpm bootstrap` is safe to run again at any ti
 4. Starts the `oddlink-db` container and waits until it is healthy. A running container is reused, and a stopped one is started.
 5. Runs `pnpm db:migrate`.
 6. Starts `pnpm dev`. Pass `--no-dev` to stop after setup instead: `pnpm bootstrap --no-dev`.
+
+To stop, press Ctrl+C in the terminal running the dev server, or run `pnpm stop` from the repository root. `pnpm stop`:
+
+1. Stops the dev server that `pnpm bootstrap` started from this checkout, if it is still running (for example in another terminal). It only signals the process `pnpm bootstrap` recorded, never whatever happens to be on port 3000.
+2. Stops the `oddlink-db` container with `docker stop`. The container and its data are kept, and the next `pnpm bootstrap` starts it again.
+
+The `oddlink-db` container is shared by every checkout and worktree on this machine, so stopping it also takes Postgres away from them (their dev servers and tests fail until it is started again). Use `pnpm stop --keep-db` to stop only the dev server.
 
 Before opening a pull request, run `pnpm verify`: it runs what CI runs, in the same order (`lint` → `typecheck` → `build` without `DATABASE_URL` → `test`) and stops at the first failure. It needs Postgres running (`pnpm bootstrap` or `pnpm db:up`) and never starts anything itself.
 
@@ -147,7 +155,7 @@ Every response (pages, the short-link `302`, the `404` pages, the API) gets a st
 
 ```
 oddlink/
-├── scripts/                          bootstrap.mjs / verify.mjs (plain Node, no dependencies)
+├── scripts/                          bootstrap.mjs / stop.mjs / verify.mjs (plain Node, no dependencies)
 ├── apps/
 │   └── web/                          Next.js app
 │       ├── proxy.ts                  short-link redirects, `+` previews and the analytics 404 check (runs before routing)
@@ -181,12 +189,14 @@ Run from the repository root; Turborepo runs each task in every package that def
 
 | Command | |
 |---|---|
-| `pnpm bootstrap` | One-command local setup (see [Getting Started](#getting-started)); `--no-dev` skips starting the dev server |
+| `pnpm bootstrap` | Start: one-command local setup (see [Getting Started](#getting-started)); `--no-dev` skips starting the dev server |
+| `pnpm stop` | Stop: the dev server started by `pnpm bootstrap`, then the `oddlink-db` container (data kept); `--keep-db` leaves the database running |
 | `pnpm verify` | Run the CI checks locally: lint, typecheck, build (without `DATABASE_URL`), test. Needs Postgres running |
 | `pnpm dev` / `build` / `start` | Next.js dev server / production build / production server |
 | `pnpm lint` / `typecheck` | Lint / type check |
 | `pnpm test` | Run tests (needs `db:up`; creates `oddlink_test` automatically) |
-| `pnpm db:up` / `db:down` | Start / stop Postgres |
+| `pnpm test:scripts` | Test `scripts/stop.mjs` (uses a throwaway container; the Docker tests are skipped if Docker is not running) |
+| `pnpm db:up` / `db:down` | Create and start Postgres / remove the container (the data volume is kept) |
 | `pnpm db:generate` | Generate a migration after changing `apps/web/lib/db/schema.ts` |
 | `pnpm db:migrate` | Apply migrations |
 | `pnpm --filter web link:disable` / `link:enable` / `link:delete` `<code>` | Operator commands (see [Operator commands](#operator-commands)) |
@@ -216,6 +226,8 @@ pnpm --filter web link:disable <code>
 unset DATABASE_URL
 ```
 
+These commands use the app's connection code, so for a TLS database also export `DATABASE_CA_CERT` (for example `export DATABASE_CA_CERT="$(cat ca.pem)"`); without it they refuse a database on another machine, and a URL with `sslmode` is rejected.
+
 `DATABASE_URL=postgres://… pnpm --filter web link:disable <code>` also works, but leaves the credentials in your shell history unless your shell skips commands that start with a space (zsh `setopt HIST_IGNORE_SPACE`, bash `HISTCONTROL=ignorespace`) and you prefix one. Never put production credentials in `apps/web/.env` of a working copy.
 
 ---
@@ -226,7 +238,9 @@ Set in `apps/web/.env`, or in the shell (`turbo.json` passes these through to th
 
 | Variable | Default | Required | Description |
 |----------|---------|----------|-------------|
-| `DATABASE_URL` | — | In production | Postgres connection string (`postgres://` or `postgresql://`). In production it must not point to this machine (see below) |
+| `DATABASE_URL` | — | In production | Postgres connection string (`postgres://` or `postgresql://`). In production it must not point to this machine (see below). TLS query parameters (`sslmode`, `ssl`, `sslrootcert`, …) are rejected: TLS is set by `DATABASE_CA_CERT` |
+| `DATABASE_CA_CERT` | — | In production, and whenever `DATABASE_URL` is not on this machine | CA certificate the database server must chain to, as PEM text (newlines, or literal `\n` on one line) or that PEM base64-encoded. When set, the app connects over TLS and verifies the certificate and host name; when unset, it connects without TLS, which is only accepted for a database on this machine (see [Database connection](#database-connection)) |
+| `ALLOW_LOCAL_PRODUCTION` | — | No | `1` lets a production process on this machine use local URLs (see below) and, with a local `DATABASE_URL`, run without `DATABASE_CA_CERT`. An error on Vercel |
 | `BASE_URL` | `http://localhost:3000` | In production | Absolute `http`/`https` URL used in generated short links; no credentials, query or fragment; trailing slashes are removed. In production it must be `https` and must not point to this machine (see below) |
 | `SAFE_BROWSING_API_KEY` | — | In production | Google Safe Browsing API key used to refuse phishing/malware URLs when issuing. Without it (dev, tests) the check is skipped with one warning |
 | `RATE_LIMIT_SECRET` | dev-only value | In production | Secret (32+ characters, e.g. `openssl rand -hex 32`) used to HMAC client addresses for rate limiting |
@@ -237,7 +251,7 @@ Set in `apps/web/.env`, or in the shell (`turbo.json` passes these through to th
 | `TEST_DATABASE_URL` | — | For `pnpm test` | Database used by the tests (not read by the app) |
 | `DB_NAME` / `DB_USERNAME` / `DB_PASSWORD` | `oddlink` / `postgres` / `postgres` | No | Used by `apps/web/docker-compose.yml` |
 
-The app validates these at startup (`apps/web/lib/env.ts`). In production (`next start`), a missing `BASE_URL`, `DATABASE_URL`, `SAFE_BROWSING_API_KEY`, `RATE_LIMIT_SECRET`, `ISSUE_RATE_LIMIT_MAX` or `ISSUE_RATE_LIMIT_WINDOW_SECONDS`, or any malformed value, prints every problem and exits. In development and tests, missing values fall back to the defaults. `next build` needs none of them.
+The app validates these at startup (`apps/web/lib/env.ts`). In production (`next start`), a missing `BASE_URL`, `DATABASE_URL`, `DATABASE_CA_CERT`, `SAFE_BROWSING_API_KEY`, `RATE_LIMIT_SECRET`, `ISSUE_RATE_LIMIT_MAX` or `ISSUE_RATE_LIMIT_WINDOW_SECONDS`, or any malformed value, prints every problem and exits. In development and tests, missing values fall back to the defaults. `next build` needs none of them.
 
 Production also refuses local URLs, so values copied from `.env.example` into a deploy environment fail at startup instead of issuing `localhost` short links: `BASE_URL` must use `https`, and neither `BASE_URL` nor `DATABASE_URL` may point to this machine (`localhost`, `*.localhost`, `127.0.0.0/8`, `0.0.0.0`, `::1`, `::`, or for the database an empty host or a Unix socket). To try a production build locally, opt in explicitly:
 
@@ -246,4 +260,24 @@ pnpm build
 ALLOW_LOCAL_PRODUCTION=1 pnpm start      # or uncomment it in apps/web/.env
 ```
 
-`ALLOW_LOCAL_PRODUCTION=1` lifts only these local-URL rules; everything else (the required variables, URL shapes) is still checked. Only the exact value `1` is accepted, and when Vercel's system variables (`VERCEL`, `VERCEL_ENV`) are present it is itself an error, at build and at startup, so it cannot switch the rules off in a Vercel deployment.
+`ALLOW_LOCAL_PRODUCTION=1` lifts only these local-URL rules, and with a local `DATABASE_URL` the `DATABASE_CA_CERT` requirement; everything else (the required variables, URL shapes) is still checked. Only the exact value `1` is accepted, and when Vercel's system variables (`VERCEL`, `VERCEL_ENV`) are present it is itself an error, at build and at startup, so it cannot switch the rules off in a Vercel deployment.
+
+### Database connection
+
+The pool (`apps/web/lib/db/index.ts`) is sized for serverless functions, where every instance holds its own pool: at most 5 connections, idle ones closed after 5 seconds, and `attachDatabasePool` from `@vercel/functions` keeps a Vercel function alive until released connections pass that idle timeout, so they are closed rather than left open while the instance is suspended. Off Vercel it does not wait for anything.
+
+**TLS.** With `DATABASE_CA_CERT` set, the connection uses TLS with `rejectUnauthorized: true` and Node's host-name check, the equivalent of libpq `sslmode=verify-full`; verification is never turned off. Without it, the connection is plain TCP, which is what the local Docker Postgres expects; a `DATABASE_URL` pointing to another machine is refused in every mode (dev servers and operator commands included), so the password never crosses the network in plain text. Production refuses to start without `DATABASE_CA_CERT` unless `DATABASE_URL` points to this machine and `ALLOW_LOCAL_PRODUCTION=1` is set (an error on Vercel).
+
+`DATABASE_URL` must not carry TLS query parameters. node-postgres parses the connection string and lets it override the `ssl` option, so `?sslmode=require` would drop the CA, `?sslmode=disable` would turn TLS off and `?sslmode=no-verify` would turn verification off; rejecting them keeps `DATABASE_CA_CERT` the only switch. `PGSSLMODE` in the environment is ignored for the same reason.
+
+For Supabase, download the CA from the project's Database Settings (SSL Configuration) and set it on Vercel for Production and Preview. A multi-line value can be pasted as is; if a setting only takes one line, use `base64 < prod-ca-2021.crt | tr -d '\n'` (the filename is whatever the dashboard gives you). Consider turning on Supabase's SSL enforcement too, so the server refuses plaintext clients as well.
+
+`pnpm db:migrate` (drizzle-kit) and its own `DATABASE_URL` do not read `DATABASE_CA_CERT`. To migrate a TLS database, give that one command a URL with `?sslmode=verify-full&sslrootcert=/path/to/ca.pem`.
+
+**Statement timeout.** The pool sends `statement_timeout=5000` as a startup parameter. That works on a direct connection and on Supavisor in session mode (port 5432), but Supabase documents that session-level settings cannot be used through Supavisor in transaction mode (port 6543), which is the URL to use on Vercel. Whether Supavisor applies the startup parameter there is Unverified, so set the timeout on the database role as well, once, from the SQL editor:
+
+```sql
+ALTER ROLE <app_role> SET statement_timeout = '5s';
+```
+
+`<app_role>` is the Postgres role the app connects as (with the shared pooler, the user `postgres.<project-ref>` is the role `postgres`). Postgres applies a role setting when a server session starts, so it does not depend on the pooler; server connections the pooler already holds keep the old value until they are replaced. The setting affects every session of that role, including `pnpm db:migrate` and the dashboard's SQL editor when they use the same role, so a dedicated role for the app is preferable to changing `postgres`. Check it with `SELECT rolname, rolconfig FROM pg_roles WHERE rolname = '<app_role>';` (`SHOW statement_timeout` in an existing session does not reflect it).

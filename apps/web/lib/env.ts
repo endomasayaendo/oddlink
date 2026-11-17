@@ -1,4 +1,6 @@
+import { X509Certificate } from "node:crypto";
 import { z } from "zod";
+import { databaseHost, isLocalDatabaseHost, isLocalHost, tlsQueryParams } from "@/lib/db/connection-url";
 
 // Server-only: this reads `process.env` and the parsed result includes DATABASE_URL (a secret).
 // Never import it from a client component.
@@ -10,6 +12,12 @@ export type Env = {
   BASE_URL: string;
   /** Postgres connection string. Only guaranteed to be present in `runtime` mode. */
   DATABASE_URL: string | undefined;
+  /**
+   * PEM CA certificate(s) the database server certificate must chain to, normalized to plain PEM.
+   * Set: connect over TLS and verify the certificate and host name. Unset: connect without TLS,
+   * which is only accepted for a database on this machine.
+   */
+  DATABASE_CA_CERT: string | undefined;
   /** IANA time zone used for daily click counts. */
   APP_TIME_ZONE: string;
   /** Google Safe Browsing API key (secret). Only guaranteed to be present in `runtime` mode. */
@@ -60,59 +68,11 @@ function isOnVercel(source: EnvSource): boolean {
   return Boolean(source.VERCEL || source.VERCEL_ENV);
 }
 
-/**
- * True for names that reach this machine: localhost and *.localhost, 127.0.0.0/8, 0.0.0.0, ::1, ::
- * and the IPv4-mapped forms of those. Parsing as an http URL first canonicalizes spellings such as
- * 127.1, 0x7f.0.0.1, 2130706433 and 0:0:0:0:0:0:0:1.
- */
-function isLocalHost(host: string): boolean {
-  let name = host.toLowerCase();
-  const bracketed = name.includes(":") && !name.startsWith("[") ? `[${name}]` : name;
-  try {
-    name = new URL(`http://${bracketed}`).hostname;
-  } catch {
-    // Not a valid http host: compare the raw name.
-  }
-  name = name.replace(/^\[(.*)\]$/, "$1").replace(/\.$/, "");
-  return (
-    name === "localhost" ||
-    name.endsWith(".localhost") ||
-    /^127\.\d+\.\d+\.\d+$/.test(name) ||
-    name === "0.0.0.0" ||
-    name === "::1" ||
-    name === "::" ||
-    /^::ffff:(7f[0-9a-f]{2}:[0-9a-f]{1,4}|0:0)$/.test(name)
-  );
-}
-
-/**
- * The server host node-postgres would connect to, read the way it reads a connection string: a
- * `host` query parameter wins over the authority, an empty host stays empty (the driver then uses
- * its local default) and a leading "/" is a Unix socket directory. Undefined when unparseable.
- * Parse errors are discarded, never surfaced: they could echo the password.
- */
-function databaseHost(raw: string): string | undefined {
-  let url: URL;
-  let emptyAuthorityHost = false;
-  try {
-    url = new URL(raw);
-  } catch {
-    try {
-      // `postgres://user:pass@/db?host=...` has credentials but no host, which URL rejects.
-      url = new URL(raw.replace("@/", "@placeholder.invalid/"));
-      emptyAuthorityHost = true;
-    } catch {
-      return undefined;
-    }
-  }
-  const fromQuery = url.searchParams.get("host");
-  if (fromQuery) return fromQuery;
-  if (emptyAuthorityHost) return "";
-  try {
-    return decodeURIComponent(url.hostname.replace(/^\[(.+)\]$/, "$1"));
-  } catch {
-    return undefined;
-  }
+/** True when `raw` is a connection string whose server is on this machine. */
+function isLocalDatabaseUrl(raw: string | undefined): boolean {
+  if (!raw) return false;
+  const host = databaseHost(raw);
+  return host !== undefined && isLocalDatabaseHost(host);
 }
 
 // Treat an empty string (`BASE_URL=` in a .env file) as unset.
@@ -157,9 +117,61 @@ const baseUrlValue = z.string().transform((raw, ctx) => {
 
 const databaseUrlValue = z
   .string()
-  // Shape only, via a regex: a parser's error message could echo the secret. The production host
-  // check parses it separately and discards any parse error.
-  .regex(/^postgres(ql)?:\/\//, { error: "must start with postgres:// or postgresql://" });
+  // Shape only, via a regex: a parser's error message could echo the secret. The host checks
+  // parse it separately and discard any parse error.
+  .regex(/^postgres(ql)?:\/\//, { error: "must start with postgres:// or postgresql://" })
+  .superRefine((value, ctx) => {
+    // Only parameter names reach the message, never their values or the rest of the URL.
+    const params = tlsQueryParams(value);
+    if (params.length > 0) {
+      ctx.addIssue({
+        code: "custom",
+        message: `must not set TLS options in the query string (found: ${[...new Set(params)].join(", ")}); TLS is configured by DATABASE_CA_CERT`,
+      });
+    }
+  });
+
+const PEM_BLOCK = /-----BEGIN ([A-Z0-9 ]+)-----[\s\S]*?-----END \1-----/g;
+
+/**
+ * Accepts PEM text (real newlines, or literal "\n" for single-line settings) or the PEM base64
+ * encoded as a whole. Returns the certificates as plain PEM. Messages never include the value.
+ */
+const caCertValue = z.string().transform((raw, ctx) => {
+  let pem = raw.trim();
+  if (!pem.includes("-----BEGIN")) {
+    const compact = pem.replace(/\s+/g, "");
+    pem = /^[A-Za-z0-9+/]+={0,2}$/.test(compact)
+      ? Buffer.from(compact, "base64").toString("utf8")
+      : "";
+  }
+  pem = pem.replace(/\\r\\n|\\n/g, "\n").replace(/\r\n/g, "\n");
+  if (/PRIVATE KEY-----/.test(pem)) {
+    ctx.addIssue({ code: "custom", message: "must not contain a private key" });
+    return z.NEVER;
+  }
+  const blocks = [...pem.matchAll(PEM_BLOCK)];
+  if (blocks.length === 0) {
+    ctx.addIssue({
+      code: "custom",
+      message: "must be a PEM certificate (-----BEGIN CERTIFICATE-----) or its base64 encoding",
+    });
+    return z.NEVER;
+  }
+  if (blocks.some((block) => block[1] !== "CERTIFICATE")) {
+    ctx.addIssue({ code: "custom", message: "must contain only CERTIFICATE blocks" });
+    return z.NEVER;
+  }
+  for (const [block] of blocks) {
+    try {
+      new X509Certificate(block);
+    } catch {
+      ctx.addIssue({ code: "custom", message: "contains a certificate that cannot be parsed" });
+      return z.NEVER;
+    }
+  }
+  return blocks.map(([block]) => block).join("\n") + "\n";
+});
 
 // Production-only rules, applied after the shape checks above. `allowLocal` lifts them.
 function productionBaseUrl(allowLocal: boolean) {
@@ -186,7 +198,7 @@ function productionDatabaseUrl(allowLocal: boolean) {
       return;
     }
     if (allowLocal) return;
-    if (host === "" || host.startsWith("/") || isLocalHost(host)) {
+    if (isLocalDatabaseHost(host)) {
       ctx.addIssue({
         code: "custom",
         message: `must not point to localhost, a loopback address or a Unix socket in production ${LOCAL_HINT}`,
@@ -232,9 +244,9 @@ const positiveIntValue = z
       .max(INT4_MAX - 1, { error: "is too large" }),
   );
 
-type SchemaContext = { onVercel: boolean; allowLocal: boolean };
+type SchemaContext = { onVercel: boolean; allowLocal: boolean; caOptional: boolean };
 
-function buildSchema(mode: EnvMode, { onVercel, allowLocal }: SchemaContext) {
+function buildSchema(mode: EnvMode, { onVercel, allowLocal, caOptional }: SchemaContext) {
   const baseUrl =
     mode === "runtime"
       ? requiredWhen(mode, "BASE_URL").pipe(baseUrlValue).pipe(productionBaseUrl(allowLocal))
@@ -257,6 +269,19 @@ function buildSchema(mode: EnvMode, { onVercel, allowLocal }: SchemaContext) {
     DATABASE_URL: z.preprocess(
       emptyAsUnset,
       mode === "runtime" ? databaseUrl : databaseUrl.optional(),
+    ),
+    DATABASE_CA_CERT: z.preprocess(
+      emptyAsUnset,
+      mode === "runtime" && !caOptional
+        ? z
+            .string({
+              error: (issue) =>
+                issue.input === undefined
+                  ? `is required in production unless DATABASE_URL is local and ${ALLOW_LOCAL_PRODUCTION}=1 (DATABASE_CA_CERT is not set)`
+                  : "must be a string",
+            })
+            .pipe(caCertValue)
+        : caCertValue.optional(),
     ),
     APP_TIME_ZONE: z.preprocess(emptyAsUnset, timeZoneValue.default(DEFAULT_TIME_ZONE)),
     SAFE_BROWSING_API_KEY: z.preprocess(
@@ -284,6 +309,18 @@ function buildSchema(mode: EnvMode, { onVercel, allowLocal }: SchemaContext) {
         : positiveIntValue.default(DEV_ISSUE_RATE_LIMIT_WINDOW_SECONDS),
     ),
     [ALLOW_LOCAL_PRODUCTION]: z.preprocess(emptyAsUnset, allowLocalProduction.optional()),
+  }).superRefine((env, ctx) => {
+    // In every mode (dev servers and operator commands included), a database that is not on this
+    // machine is only reached over verified TLS, so the password never crosses the network in
+    // plain text. A host that cannot be read counts as remote.
+    if (env.DATABASE_URL === undefined || env.DATABASE_CA_CERT !== undefined) return;
+    const host = databaseHost(env.DATABASE_URL);
+    if (host !== undefined && isLocalDatabaseHost(host)) return;
+    ctx.addIssue({
+      code: "custom",
+      path: ["DATABASE_CA_CERT"],
+      message: "is required when DATABASE_URL points to a database on another machine (DATABASE_CA_CERT is not set)",
+    });
   });
 }
 
@@ -295,9 +332,12 @@ function buildSchema(mode: EnvMode, { onVercel, allowLocal }: SchemaContext) {
 export function parseEnv(source: EnvSource, mode: EnvMode): Env {
   const onVercel = isOnVercel(source);
   const allowLocal = mode === "runtime" && !onVercel && source[ALLOW_LOCAL_PRODUCTION] === "1";
-  const result = buildSchema(mode, { onVercel, allowLocal }).safeParse({
+  // A local production run against the Docker Postgres may skip TLS; any other database may not.
+  const caOptional = allowLocal && isLocalDatabaseUrl(source.DATABASE_URL);
+  const result = buildSchema(mode, { onVercel, allowLocal, caOptional }).safeParse({
     BASE_URL: source.BASE_URL,
     DATABASE_URL: source.DATABASE_URL,
+    DATABASE_CA_CERT: source.DATABASE_CA_CERT,
     APP_TIME_ZONE: source.APP_TIME_ZONE,
     SAFE_BROWSING_API_KEY: source.SAFE_BROWSING_API_KEY,
     RATE_LIMIT_SECRET: source.RATE_LIMIT_SECRET,
