@@ -9,7 +9,6 @@ export default function GlobalError({ error, retry }: { error: unknown; retry: (
   return (
     <html lang="en" className={`${fontVariables} antialiased`}>
       <body className="paper-texture min-h-screen min-w-[320px] bg-paper font-sans leading-normal text-ink">
-        <title>Something went wrong - OddLink</title>
         <CrashPage error={error} retry={retry} />
       </body>
     </html>

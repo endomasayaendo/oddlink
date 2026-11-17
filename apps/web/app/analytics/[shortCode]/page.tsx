@@ -1,9 +1,11 @@
 import { LineChart } from "@oddlink/ui/charts";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { getAnalytics } from "@/lib/analytics/get-analytics";
 import { formatDate } from "@/lib/format-date";
+import { shortCodeFromParams } from "@/lib/links/short-code-param";
 import { FLAGGED_REASON, isFlagged } from "@/lib/links/gone";
 import { Destination } from "@/ui/analytics/destination";
 import { StatCard } from "@/ui/analytics/stat-card";
@@ -12,6 +14,14 @@ import { StatCard } from "@/ui/analytics/stat-card";
 function formatDay(day: string): string {
   return new Date(`${day}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 }
+
+// Analytics are for the person holding the link, not for search results. Static and generic on
+// purpose, so the title and robots meta are part of the prerendered shell whatever the lookup
+// below finds; the code itself is already in the address bar and the heading.
+export const metadata: Metadata = {
+  title: "Link analytics - OddLink",
+  robots: { index: false, follow: false },
+};
 
 export default function AnalyticsPage({ params }: PageProps<"/analytics/[shortCode]">) {
   return (
@@ -30,7 +40,7 @@ export default function AnalyticsPage({ params }: PageProps<"/analytics/[shortCo
 }
 
 async function AnalyticsContent({ params }: Pick<PageProps<"/analytics/[shortCode]">, "params">) {
-  const { shortCode } = await params;
+  const shortCode = await shortCodeFromParams(params);
   const data = await getAnalytics(shortCode);
   // The proxy answers deleted links before this page runs.
   if (!data || data.state === "deleted") notFound();
@@ -40,14 +50,11 @@ async function AnalyticsContent({ params }: Pick<PageProps<"/analytics/[shortCod
   return (
     <>
       <div className="mb-8 text-center">
-        <a
-          href={data.shortUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="mb-2 block text-lg font-semibold break-all text-tomato-deep"
-        >
-          {data.shortUrl}
-        </a>
+        <h1 className="mb-2 text-lg font-semibold break-all">
+          <a href={data.shortUrl} target="_blank" rel="noopener noreferrer" className="block text-tomato-deep">
+            {data.shortUrl}
+          </a>
+        </h1>
         <Destination originalUrl={data.originalUrl} originalHref={data.originalHref} />
       </div>
 
