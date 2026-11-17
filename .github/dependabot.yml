@@ -1,0 +1,68 @@
+version: 2
+
+updates:
+  # pnpm workspace: the root directory covers every workspace package and
+  # pnpm-lock.yaml.
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Tokyo"
+    open-pull-requests-limit: 5
+    # Wait a few days after a release so pnpm's minimum release age does not
+    # reject the proposed version.
+    cooldown:
+      default-days: 3
+    commit-message:
+      prefix: "chore(deps)"
+      prefix-development: "chore(deps-dev)"
+    # A dependency joins the first group it matches; anything unmatched
+    # (other major updates) gets its own pull request.
+    groups:
+      # The ORM and its migration CLI are versioned together.
+      drizzle:
+        patterns:
+          - "drizzle-orm"
+          - "drizzle-kit"
+      # Next.js major upgrades, kept apart from everything else.
+      next-major:
+        patterns:
+          - "next"
+          - "eslint-config-next"
+        update-types:
+          - "major"
+      # React major upgrades, kept apart from everything else.
+      react-major:
+        patterns:
+          - "react"
+          - "react-dom"
+          - "@types/react"
+          - "@types/react-dom"
+        update-types:
+          - "major"
+      minor-and-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Tokyo"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "ci"
+    groups:
+      minor-and-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
