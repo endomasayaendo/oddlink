@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { getLinkState, type LinkStatus } from "@/lib/links/link-state";
 import { findActiveLink, type ResolvedLink, resolveShortCode, toRedirectUrl } from "@/lib/links/resolve-link";
+import { isCountableClick } from "@/lib/middleware/utils/is-countable-click";
 import { isPossibleShortCode } from "@/lib/middleware/utils/is-possible-short-code";
 import { serveGone } from "@/lib/middleware/utils/serve-gone";
 import { rewriteNotFound } from "@/lib/middleware/utils/rewrite-not-found";
@@ -9,13 +10,15 @@ export async function LinkMiddleware(req: NextRequest, key: string) {
   // Keys that can't be a short code never reach the DB (a NUL there would even fail the query).
   if (!isPossibleShortCode(key)) return notFound(req);
 
-  // HEAD comes from link checkers and monitors, not people: it gets the same answer uncounted.
-  const lookup = req.method === "HEAD" ? findActiveLink : resolveShortCode;
+  // HEAD (link checkers, monitors), prefetches and known bots are not people clicking: they get
+  // the same answer, uncounted.
+  const counted = req.method === "GET" && isCountableClick(req);
+  const lookup = counted ? resolveShortCode : findActiveLink;
   let link: ResolvedLink | null;
   try {
     link = await lookup(key);
   } catch (error) {
-    // No redirect without a successful lookup; for GET that includes the count-and-log write.
+    // No redirect without a successful lookup; for a counted GET that includes the count-and-log write.
     console.error("Failed to resolve short link", error);
     return unavailable();
   }

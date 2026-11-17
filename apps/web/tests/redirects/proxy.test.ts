@@ -22,8 +22,8 @@ const countOf = async (shortCode: string) =>
 
 const logsOf = (urlMappingId: number) => db.$count(accessLog, eq(accessLog.urlMappingId, urlMappingId));
 
-function request(path: string, method = "GET") {
-  return { res: proxy(new NextRequest(`http://localhost:3000${path}`, { method })) };
+function request(path: string, method = "GET", headers: Record<string, string> = {}) {
+  return { res: proxy(new NextRequest(`http://localhost:3000${path}`, { method, headers })) };
 }
 
 const passesThrough = (res: Response) => res.headers.get("x-middleware-next") === "1";
@@ -203,6 +203,40 @@ describe("proxy redirects", () => {
     vi.spyOn(db, "execute").mockRejectedValueOnce(new Error("connection lost"));
     expect((await request("/some-code", "HEAD").res).status).toBe(503);
     expect(console.error).toHaveBeenCalled();
+  });
+
+  const CHROME =
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36";
+
+  const redirectShape = (res: Response) => ({
+    status: res.status,
+    headers: Object.fromEntries(res.headers.entries()),
+  });
+
+  it.each([
+    ["a Sec-Purpose prefetch", { "user-agent": CHROME, "sec-purpose": "prefetch" }],
+    ["a Sec-Purpose prerender prefetch", { "user-agent": CHROME, "sec-purpose": "prefetch;prerender" }],
+    ["a legacy Purpose prefetch", { "user-agent": CHROME, purpose: "Prefetch" }],
+    ["Slackbot", { "user-agent": "Slackbot-LinkExpanding 1.0 (+https://api.slack.com/robots)" }],
+    ["Googlebot", { "user-agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)" }],
+    ["facebookexternalhit", { "user-agent": "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)" }],
+  ])("redirects %s exactly like a click without counting or logging it", async (_, headers) => {
+    const link = await insertLink("bot-code", "https://example.com/target", future());
+    const uncounted = await request("/bot-code", "GET", headers).res;
+    expect(uncounted.status).toBe(302);
+    expect(uncounted.headers.get("location")).toBe("https://example.com/target");
+    expect(await countOf("bot-code")).toBe(0);
+    expect(await logsOf(link.id)).toBe(0);
+
+    const click = await request("/bot-code", "GET", { "user-agent": CHROME }).res;
+    expect(redirectShape(uncounted)).toEqual(redirectShape(click));
+    expect(await countOf("bot-code")).toBe(1);
+    expect(await logsOf(link.id)).toBe(1);
+  });
+
+  it("serves the 404 page for an unknown code on a prefetch or bot GET", async () => {
+    expectNotFound(await request("/missing-code", "GET", { "sec-purpose": "prefetch" }).res);
+    expectNotFound(await request("/missing-code", "GET", { "user-agent": "Twitterbot/1.0" }).res);
   });
 
   it.each(["POST", "PUT", "DELETE", "PATCH"])("answers %s with 405 without counting a click", async (method) => {
