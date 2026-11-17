@@ -86,7 +86,12 @@ describe("analytics page", () => {
   });
 
   it("has one main and the short URL as its h1", async () => {
-    vi.mocked(getAnalytics).mockResolvedValue({ ...base, state: "active", originalUrl: "https://example.com" } as Analytics);
+    vi.mocked(getAnalytics).mockResolvedValue({
+      ...base,
+      state: "active",
+      originalUrl: "https://example.com",
+      originalHref: "https://example.com/",
+    } as Analytics);
     const html = await renderAll(createElement(AnalyticsPage, { params, searchParams: Promise.resolve({}) }));
     expectLandmarks(html, "http://localhost:3000/odd-code");
   });
