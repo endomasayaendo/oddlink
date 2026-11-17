@@ -72,3 +72,31 @@ describe.each(pages)("%s page", (name, page, route) => {
     await expect(renderPage(page, route, path(encodeURIComponent("いぬ")))).rejects.toMatchObject(NOT_FOUND);
   });
 });
+
+describe("analytics page link state", () => {
+  const route = "/analytics/[shortCode]";
+  const shortLink = (code: string) => new RegExp(`<a[^>]*href="[^"]*/${code}"`);
+
+  it("marks an expired link and does not link its short URL", async () => {
+    await db.insert(urlMappings).values({
+      shortCode: "faded-moon",
+      originalUrl: "https://example.com/old",
+      expiresAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
+    });
+    const html = await renderPage(AnalyticsPage as Page, route, "/analytics/faded-moon");
+    expect(html).toMatch(/<div role="status"[^>]*>Expired on [^<]+\. This link no longer redirects\.<\/div>/);
+    expect(html).toContain("/faded-moon</p>");
+    expect(html).not.toMatch(shortLink("faded-moon"));
+  });
+
+  it("links an active link's short URL and shows no status", async () => {
+    await db.insert(urlMappings).values({
+      shortCode: "bright-sun",
+      originalUrl: "https://example.com/new",
+      expiresAt: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000),
+    });
+    const html = await renderPage(AnalyticsPage as Page, route, "/analytics/bright-sun");
+    expect(html).toMatch(shortLink("bright-sun"));
+    expect(html).not.toContain('role="status"');
+  });
+});
