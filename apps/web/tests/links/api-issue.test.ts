@@ -50,6 +50,16 @@ describe("POST /api/issue", () => {
     expect(await res.json()).toEqual({ message: "URLs with a username or password are not allowed" });
   });
 
+  it("returns 400 when the URL points at this site's own short links", async () => {
+    checkIssueRateLimit.mockClear();
+    checkUrlSafety.mockClear();
+    const res = await post(JSON.stringify({ originalUrl: "http://localhost:3000/some-short-code" }));
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ message: "URLs that point to this site's own short links are not allowed" });
+    expect(checkIssueRateLimit).not.toHaveBeenCalled();
+    expect(checkUrlSafety).not.toHaveBeenCalled();
+  });
+
   it("returns 400 when the body is empty or not JSON", async () => {
     expect((await post()).status).toBe(400);
     expect((await post("{oops")).status).toBe(400);
