@@ -85,7 +85,7 @@ describe("analytics page link state", () => {
     });
     const html = await renderPage(AnalyticsPage as Page, route, "/analytics/faded-moon");
     expect(html).toMatch(/<div role="status"[^>]*>Expired on [^<]+\. This link no longer redirects\.<\/div>/);
-    expect(html).toContain("/faded-moon</p>");
+    expect(html).toContain("/faded-moon</span>");
     expect(html).not.toMatch(shortLink("faded-moon"));
   });
 
