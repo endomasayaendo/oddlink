@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { POST } from "@/app/api/issue/route";
+import { DELETE, GET, OPTIONS, PATCH, POST, PUT } from "@/app/api/issue/route";
 import { resetUrlTables } from "../utils/reset-db";
 
 const checkUrlSafety = vi.hoisted(() => vi.fn<(url: string) => Promise<"safe" | "unsafe" | "unknown">>(async () => "safe"));
@@ -117,5 +117,24 @@ describe("POST /api/issue", () => {
       expect((await POST(req)).status).toBe(415);
       expect(req.bodyUsed).toBe(false);
     });
+  });
+});
+
+describe("other methods on /api/issue", () => {
+  it.each([
+    ["GET", GET],
+    ["PUT", PUT],
+    ["DELETE", DELETE],
+    ["PATCH", PATCH],
+  ])("answers %s with 405 and the allowed methods", (_method, handler) => {
+    const res = handler();
+    expect(res.status).toBe(405);
+    expect(res.headers.get("allow")).toBe("OPTIONS, POST");
+  });
+
+  it("answers OPTIONS with the allowed methods", () => {
+    const res = OPTIONS();
+    expect(res.status).toBe(204);
+    expect(res.headers.get("allow")).toBe("OPTIONS, POST");
   });
 });

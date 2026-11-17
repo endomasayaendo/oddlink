@@ -34,3 +34,21 @@ export async function POST(request: Request) {
   }
   return Response.json({ shortUrl: result.shortUrl, originalUrl: result.originalUrl });
 }
+
+// The only methods this route answers. Next's own 405 for other methods carries no `Allow`, so
+// each one is answered explicitly, and OPTIONS is spelled out so `GET` below isn't advertised.
+const ALLOW = "OPTIONS, POST";
+
+function methodNotAllowed() {
+  return new Response(null, { status: 405, headers: { Allow: ALLOW } });
+}
+
+export function OPTIONS() {
+  return new Response(null, { status: 204, headers: { Allow: ALLOW } });
+}
+
+// HEAD is answered by GET.
+export const GET = methodNotAllowed;
+export const PUT = methodNotAllowed;
+export const DELETE = methodNotAllowed;
+export const PATCH = methodNotAllowed;

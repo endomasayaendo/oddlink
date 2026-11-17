@@ -17,6 +17,9 @@ export const config: ProxyConfig = {
   ],
 };
 
+// Methods a short link answers; sent as `Allow` on OPTIONS and on 405.
+const SHORT_LINK_ALLOW = "GET, HEAD, OPTIONS";
+
 export async function proxy(req: NextRequest) {
   const { key, preview, analyticsKey, previewPageKey } = parse(req);
 
@@ -35,10 +38,10 @@ export async function proxy(req: NextRequest) {
 
   // Mirror what a GET-only route handler answers, so other methods never count as clicks.
   if (req.method === "OPTIONS") {
-    return new NextResponse(null, { status: 204, headers: { Allow: "GET, HEAD, OPTIONS" } });
+    return new NextResponse(null, { status: 204, headers: { Allow: SHORT_LINK_ALLOW } });
   }
   if (req.method !== "GET" && req.method !== "HEAD") {
-    return new NextResponse(null, { status: 405 });
+    return new NextResponse(null, { status: 405, headers: { Allow: SHORT_LINK_ALLOW } });
   }
 
   if (preview) {
