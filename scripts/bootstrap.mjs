@@ -2,12 +2,25 @@
 // Safe to run repeatedly: it never overwrites apps/web/.env and reuses an existing DB container.
 import { constants, copyFileSync, existsSync } from "node:fs";
 import { constants as osConstants } from "node:os";
-import { ENV_EXAMPLE, ENV_FILE, capture, die, info, ok, pnpm, run, sleep, step, warn } from "./lib.mjs";
+import {
+  DB_CONTAINER,
+  ENV_EXAMPLE,
+  ENV_FILE,
+  capture,
+  containerState,
+  die,
+  dockerStatus,
+  info,
+  ok,
+  pnpm,
+  removeDevRecord,
+  run,
+  sleep,
+  step,
+  warn,
+  writeDevRecord,
+} from "./lib.mjs";
 
-// The compose file hard-codes this name. ODDLINK_DB_CONTAINER exists only so the container-state
-// branches below can be exercised against a throwaway container; it does not rename the one that
-// `pnpm db:up` creates.
-const DB_CONTAINER = process.env.ODDLINK_DB_CONTAINER || "oddlink-db";
 const HEALTH_POLL_MS = 2000;
 const HEALTH_TIMEOUT_MS = 60_000;
 
@@ -23,28 +36,20 @@ const PORT_HINT =
   "already listening there. Stop it, or use it as-is: this project expects Postgres on localhost:5432.";
 
 function checkDocker() {
-  const result = capture("docker", ["info", "--format", "{{.ServerVersion}}"]);
-  if (result.error?.code === "ENOENT") {
+  const { status, stderr } = dockerStatus();
+  if (status === "not-installed") {
     die(
       "Docker is not installed (the `docker` command was not found).",
       "Install Docker Desktop (https://docs.docker.com/get-docker/), start it, then run `pnpm bootstrap` again.",
     );
   }
-  if (result.code !== 0) {
+  if (status === "unreachable") {
     die(
       "Docker is installed but not running (or this user cannot reach the daemon).",
-      `${result.stderr.trim()}\n\n` +
+      `${stderr}\n\n` +
         "Start Docker Desktop (or the Docker daemon), wait until it is ready, then run `pnpm bootstrap` again.",
     );
   }
-}
-
-/** The container's state ("running", "exited", "created", ...), or null if it does not exist. */
-function containerState() {
-  const result = capture("docker", ["container", "inspect", "--format", "{{.State.Status}}", DB_CONTAINER]);
-  if (result.code === 0) return result.stdout.trim();
-  if (/no such/i.test(result.stderr)) return null;
-  die(`Could not inspect the \`${DB_CONTAINER}\` container.`, result.stderr.trim());
 }
 
 /**
@@ -115,6 +120,9 @@ async function startDev() {
   for (const signal of ["SIGTERM", "SIGHUP"]) {
     process.on(signal, () => child?.kill(signal));
   }
+  // `pnpm stop` finds this process through the record and sends it SIGTERM, which is forwarded above.
+  writeDevRecord();
+  process.on("exit", () => removeDevRecord(process.pid));
   const { code, signal } = await run("pnpm", ["dev"], { onChild: (c) => (child = c) });
   process.exit(code ?? 128 + (osConstants.signals[signal] ?? 0));
 }

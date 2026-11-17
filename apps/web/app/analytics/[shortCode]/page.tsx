@@ -45,18 +45,30 @@ async function AnalyticsContent({ params }: Pick<PageProps<"/analytics/[shortCod
   // The proxy answers deleted links before this page runs.
   if (!data || data.state === "deleted") notFound();
 
+  const expired = data.state === "expired";
   const chartData = data.dailyAccess.map((d) => ({ date: formatDay(d.date), count: d.count }));
 
   return (
     <>
       <div className="mb-8 text-center">
         <h1 className="mb-2 text-lg font-semibold break-all">
-          <a href={data.shortUrl} target="_blank" rel="noopener noreferrer" className="block text-tomato-deep">
-            {data.shortUrl}
-          </a>
+          {/* An expired link no longer redirects, so its short URL is shown as plain text. */}
+          {expired ? (
+            <span className="block text-ink-muted">{data.shortUrl}</span>
+          ) : (
+            <a href={data.shortUrl} target="_blank" rel="noopener noreferrer" className="block text-tomato-deep">
+              {data.shortUrl}
+            </a>
+          )}
         </h1>
         <Destination originalUrl={data.originalUrl} originalHref={data.originalHref} />
       </div>
+
+      {expired && data.expiresAt && (
+        <div role="status" className="mb-8 rounded-wobble border-2 border-rust bg-rust-wash p-4 text-center font-semibold text-rust">
+          Expired on {formatDate(data.expiresAt)}. This link no longer redirects.
+        </div>
+      )}
 
       {data.state === "disabled" && (
         <div role="status" className="mb-8 rounded-wobble border-2 border-rust bg-rust-wash p-4 text-center font-semibold text-rust">
