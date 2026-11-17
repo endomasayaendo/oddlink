@@ -6,6 +6,7 @@
   },
   "scripts": {
     "bootstrap": "node scripts/bootstrap.mjs",
+    "stop": "node scripts/stop.mjs",
     "verify": "node scripts/verify.mjs",
     "build": "turbo build",
     "dev": "turbo dev",
@@ -13,6 +14,7 @@
     "lint": "turbo lint lint:scripts",
     "lint:scripts": "eslint --max-warnings 0 scripts",
     "test": "turbo test",
+    "test:scripts": "node --test \"scripts/*.test.mjs\"",
     "typecheck": "turbo typecheck",
     "db:up": "pnpm --filter web db:up",
     "db:down": "pnpm --filter web db:down",
@@ -22,8 +24,8 @@
   },
   "devDependencies": {
     "eslint": "^9.39.5",
-    "eslint-config-next": "16.4.3",
-    "turbo": "^2.11.10",
+    "eslint-config-next": "16.4.6",
+    "turbo": "^2.11.11",
     "typescript": "^5.9.3"
   },
   "packageManager": "pnpm@12.15.0"
