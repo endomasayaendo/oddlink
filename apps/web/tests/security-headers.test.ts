@@ -7,7 +7,7 @@ const asMap = (headers: { key: string; value: string }[]) => Object.fromEntries(
 describe("security headers", () => {
   it("applies to every path, including `/`", async () => {
     const rules = await nextConfig.headers!();
-    expect(rules).toHaveLength(1);
+    expect(rules.filter((rule) => rule.source === "/:path*")).toHaveLength(1);
     expect(rules[0].source).toBe("/:path*");
   });
 

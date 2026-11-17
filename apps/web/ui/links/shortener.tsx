@@ -52,11 +52,14 @@ export function Shortener() {
       {/* Keyed by code: the page turns over once per issued link, never on failures or history edits. */}
       {state?.ok && <FlipOverlay key={state.shortCode} />}
 
-      {state?.ok && (
-        <div className="flex justify-center">
+      {/* Rendered from the start so screen readers are already watching it when progress or a result
+          appears; removals (a failed retry clearing the card) are not announced, the alert covers those. */}
+      <div role="status" className="flex justify-center">
+        {pending && <span className="sr-only">Shortening...</span>}
+        {state?.ok && (
           <ResultCard key={state.shortCode} shortCode={state.shortCode} shortUrl={state.shortUrl} onError={setCopyError} />
-        </div>
-      )}
+        )}
+      </div>
 
       <HistoryList history={history} onRemove={removeEntry} />
     </>

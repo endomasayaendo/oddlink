@@ -48,7 +48,8 @@ smoke-gently-carries-blue-key
 ```bash
 git clone https://github.com/endomasayaendo/oddlink.git
 cd oddlink
-pnpm bootstrap                           # install, set up .env, start Postgres, migrate, run the dev server
+pnpm bootstrap                           # start: install, set up .env, start Postgres, migrate, run the dev server
+pnpm stop                                # stop: the dev server and Postgres (data is kept)
 ```
 
 Then open http://localhost:3000. `pnpm bootstrap` is safe to run again at any time:
@@ -59,6 +60,13 @@ Then open http://localhost:3000. `pnpm bootstrap` is safe to run again at any ti
 4. Starts the `oddlink-db` container and waits until it is healthy. A running container is reused, and a stopped one is started.
 5. Runs `pnpm db:migrate`.
 6. Starts `pnpm dev`. Pass `--no-dev` to stop after setup instead: `pnpm bootstrap --no-dev`.
+
+To stop, press Ctrl+C in the terminal running the dev server, or run `pnpm stop` from the repository root. `pnpm stop`:
+
+1. Stops the dev server that `pnpm bootstrap` started from this checkout, if it is still running (for example in another terminal). It only signals the process `pnpm bootstrap` recorded, never whatever happens to be on port 3000.
+2. Stops the `oddlink-db` container with `docker stop`. The container and its data are kept, and the next `pnpm bootstrap` starts it again.
+
+The `oddlink-db` container is shared by every checkout and worktree on this machine, so stopping it also takes Postgres away from them (their dev servers and tests fail until it is started again). Use `pnpm stop --keep-db` to stop only the dev server.
 
 Before opening a pull request, run `pnpm verify`: it runs what CI runs, in the same order (`lint` → `typecheck` → `build` without `DATABASE_URL` → `test`) and stops at the first failure. It needs Postgres running (`pnpm bootstrap` or `pnpm db:up`) and never starts anything itself.
 
@@ -84,9 +92,9 @@ If the port is taken, or `pnpm db:up` complains that the name `oddlink-db` is in
 |---|---|
 | `/` | Shorten a URL (Server Action) and see your recent links (stored in `localStorage`) |
 | `POST /api/issue` | Shorten a URL from anywhere else (see below) |
-| `GET /{shortCode}` | Handled in `proxy.ts`: counts and logs the access in one SQL statement, then `302`s to the original URL (`503` if that write fails). Unknown or expired codes get a real `404` |
-| `GET /{shortCode}+` | Preview page (rewritten to `/preview/{shortCode}`): shows the destination host and full address, created / expires dates and total clicks, and a "Continue" button that goes through the short link itself. Viewing it never counts as a click. Unknown, unusable or malformed codes get a real `404`; expired links get a page with an "Expired" banner and no button. `no-store`, `noindex`. A transparency feature for the person holding the link, not an abuse filter |
-| `/analytics/{shortCode}` | Total clicks, created / expires dates, and daily clicks. `proxy.ts` checks the code first so unknown codes get a real `404` |
+| `GET /{shortCode}` | Handled in `proxy.ts`: counts and logs the access in one SQL statement, then `302`s to the original URL (`503` if that write fails). Unknown or expired codes get a real `404`; disabled or deleted links get `410 Gone` (a static page, `no-store`, `noindex`, never the destination) |
+| `GET /{shortCode}+` | Preview page (rewritten to `/preview/{shortCode}`): shows the destination host and full address, created / expires dates and total clicks, and a "Continue" button that goes through the short link itself. Viewing it never counts as a click. Unknown, unusable or malformed codes get a real `404`; disabled or deleted links get `410 Gone`; expired links get a page with an "Expired" banner and no button. `no-store`, `noindex`. A transparency feature for the person holding the link, not an abuse filter |
+| `/analytics/{shortCode}` | Total clicks, created / expires dates, and daily clicks. `proxy.ts` checks the code first so unknown codes get a real `404` and disabled or deleted ones `410 Gone` |
 
 ### `POST /api/issue`
 
@@ -147,7 +155,7 @@ Every response (pages, the short-link `302`, the `404` pages, the API) gets a st
 
 ```
 oddlink/
-├── scripts/                          bootstrap.mjs / verify.mjs (plain Node, no dependencies)
+├── scripts/                          bootstrap.mjs / stop.mjs / verify.mjs (plain Node, no dependencies)
 ├── apps/
 │   └── web/                          Next.js app
 │       ├── proxy.ts                  short-link redirects, `+` previews and the analytics 404 check (runs before routing)
@@ -181,12 +189,14 @@ Run from the repository root; Turborepo runs each task in every package that def
 
 | Command | |
 |---|---|
-| `pnpm bootstrap` | One-command local setup (see [Getting Started](#getting-started)); `--no-dev` skips starting the dev server |
+| `pnpm bootstrap` | Start: one-command local setup (see [Getting Started](#getting-started)); `--no-dev` skips starting the dev server |
+| `pnpm stop` | Stop: the dev server started by `pnpm bootstrap`, then the `oddlink-db` container (data kept); `--keep-db` leaves the database running |
 | `pnpm verify` | Run the CI checks locally: lint, typecheck, build (without `DATABASE_URL`), test. Needs Postgres running |
 | `pnpm dev` / `build` / `start` | Next.js dev server / production build / production server |
 | `pnpm lint` / `typecheck` | Lint / type check |
 | `pnpm test` | Run tests (needs `db:up`; creates `oddlink_test` automatically) |
-| `pnpm db:up` / `db:down` | Start / stop Postgres |
+| `pnpm test:scripts` | Test `scripts/stop.mjs` (uses a throwaway container; the Docker tests are skipped if Docker is not running) |
+| `pnpm db:up` / `db:down` | Create and start Postgres / remove the container (the data volume is kept) |
 | `pnpm db:generate` | Generate a migration after changing `apps/web/lib/db/schema.ts` |
 | `pnpm db:migrate` | Apply migrations |
 | `pnpm --filter web link:disable` / `link:enable` / `link:delete` `<code>` | Operator commands (see [Operator commands](#operator-commands)) |
@@ -233,7 +243,7 @@ Set in `apps/web/.env`, or in the shell (`turbo.json` passes these through to th
 | `ISSUE_RATE_LIMIT_MAX` | dev-only value | In production | Links one client may issue per window (positive integer) |
 | `ISSUE_RATE_LIMIT_WINDOW_SECONDS` | dev-only value | In production | Rate-limit window length in seconds (positive integer) |
 | `APP_TIME_ZONE` | `Asia/Tokyo` | No | IANA time zone name (e.g. `Asia/Tokyo`, `UTC`) for daily click counts and dates; offsets like `+09:00` are rejected |
-| `TEST_DATABASE_URL` | — | For `pnpm test` | Database used by the tests (not read by the app) |
+| `TEST_DATABASE_URL` | — | For `pnpm test` | Database used by the tests (not read by the app). The tests truncate its tables, so they refuse to run unless the database name ends in `_test` or `_test_<suffix>` (e.g. `oddlink_test`, `oddlink_test_97`) |
 | `DB_NAME` / `DB_USERNAME` / `DB_PASSWORD` | `oddlink` / `postgres` / `postgres` | No | Used by `apps/web/docker-compose.yml` |
 
 The app validates these at startup (`apps/web/lib/env.ts`). In production (`next start`), a missing `BASE_URL`, `DATABASE_URL`, `SAFE_BROWSING_API_KEY`, `RATE_LIMIT_SECRET`, `ISSUE_RATE_LIMIT_MAX` or `ISSUE_RATE_LIMIT_WINDOW_SECONDS`, or any malformed value, prints every problem and exits. In development and tests, missing values fall back to the defaults. `next build` needs none of them.
