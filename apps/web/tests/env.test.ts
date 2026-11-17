@@ -292,12 +292,30 @@ describe("DATABASE_CA_CERT", () => {
     );
   });
 
-  it("is optional in build and lenient modes, where unset means no TLS", () => {
+  it("is optional in build and lenient modes for a local database, where unset means no TLS", () => {
+    const local = "postgres://app:pw@localhost:5432/oddlink";
     for (const mode of ["build", "lenient"] as const) {
-      expect(parse(undefined, mode)).toBeUndefined();
-      expect(parse("", mode)).toBeUndefined();
-      expect(parse(CA, mode)).toBe(normalized);
+      const run = (DATABASE_CA_CERT: string | undefined) =>
+        parseEnv({ ...runtimeEnv, DATABASE_URL: local, DATABASE_CA_CERT }, mode).DATABASE_CA_CERT;
+      expect(run(undefined)).toBeUndefined();
+      expect(run("")).toBeUndefined();
+      expect(run(CA)).toBe(normalized);
     }
+  });
+
+  it("is required in every mode when the database is on another machine, so it is never reached in plain text", () => {
+    for (const mode of ["build", "lenient", "runtime"] as const) {
+      expect(() => parse(undefined, mode)).toThrow("- DATABASE_CA_CERT:");
+    }
+    for (const mode of ["build", "lenient"] as const) {
+      const message = messageOf(() => parse(undefined, mode));
+      expect(message).toContain("is required when DATABASE_URL points to a database on another machine");
+      expect(message).not.toContain(PASSWORD);
+    }
+    // ALLOW_LOCAL_PRODUCTION never lifts it for a remote host.
+    expect(() =>
+      parseEnv({ ...runtimeEnv, DATABASE_CA_CERT: undefined, ALLOW_LOCAL_PRODUCTION: "1" }, "lenient"),
+    ).toThrow("- DATABASE_CA_CERT:");
   });
 
   describe("ALLOW_LOCAL_PRODUCTION", () => {

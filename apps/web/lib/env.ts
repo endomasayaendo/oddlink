@@ -14,7 +14,8 @@ export type Env = {
   DATABASE_URL: string | undefined;
   /**
    * PEM CA certificate(s) the database server certificate must chain to, normalized to plain PEM.
-   * Set: connect over TLS and verify the certificate and host name. Unset: connect without TLS.
+   * Set: connect over TLS and verify the certificate and host name. Unset: connect without TLS,
+   * which is only accepted for a database on this machine.
    */
   DATABASE_CA_CERT: string | undefined;
   /** IANA time zone used for daily click counts. */
@@ -260,6 +261,18 @@ function buildSchema(mode: EnvMode, { caOptional }: { caOptional: boolean }) {
         ? requiredWhen(mode, "ISSUE_RATE_LIMIT_WINDOW_SECONDS").pipe(positiveIntValue)
         : positiveIntValue.default(DEV_ISSUE_RATE_LIMIT_WINDOW_SECONDS),
     ),
+  }).superRefine((env, ctx) => {
+    // In every mode (dev servers and operator commands included), a database that is not on this
+    // machine is only reached over verified TLS, so the password never crosses the network in
+    // plain text. A host that cannot be read counts as remote.
+    if (env.DATABASE_URL === undefined || env.DATABASE_CA_CERT !== undefined) return;
+    const host = databaseHost(env.DATABASE_URL);
+    if (host !== undefined && isLocalDatabaseHost(host)) return;
+    ctx.addIssue({
+      code: "custom",
+      path: ["DATABASE_CA_CERT"],
+      message: "is required when DATABASE_URL points to a database on another machine (DATABASE_CA_CERT is not set)",
+    });
   });
 }
 
