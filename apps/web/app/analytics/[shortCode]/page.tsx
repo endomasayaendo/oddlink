@@ -7,6 +7,7 @@ import { getAnalytics } from "@/lib/analytics/get-analytics";
 import { formatDate } from "@/lib/format-date";
 import { shortCodeFromParams } from "@/lib/links/short-code-param";
 import { FLAGGED_REASON, isFlagged } from "@/lib/links/gone";
+import { Destination } from "@/ui/analytics/destination";
 import { StatCard } from "@/ui/analytics/stat-card";
 
 // "2026-01-02" -> "Jan 2"; the date is already in APP_TIME_ZONE, so format it as UTC.
@@ -14,9 +15,11 @@ function formatDay(day: string): string {
   return new Date(`${day}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 }
 
-// Analytics are for the person holding the link, not for search results. Static, so the robots
-// meta is part of the prerendered shell whatever the lookup below finds.
+// Analytics are for the person holding the link, not for search results. Static and generic on
+// purpose, so the title and robots meta are part of the prerendered shell whatever the lookup
+// below finds; the code itself is already in the address bar and the heading.
 export const metadata: Metadata = {
+  title: "Link analytics - OddLink",
   robots: { index: false, follow: false },
 };
 
@@ -48,30 +51,17 @@ async function AnalyticsContent({ params }: Pick<PageProps<"/analytics/[shortCod
   return (
     <>
       <div className="mb-8 text-center">
-        {/* An expired link no longer redirects, so its short URL is shown as plain text. */}
-        {expired ? (
-          <p className="mb-2 text-lg font-semibold break-all text-ink-muted">{data.shortUrl}</p>
-        ) : (
-          <a
-            href={data.shortUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mb-2 block text-lg font-semibold break-all text-tomato-deep"
-          >
-            {data.shortUrl}
-          </a>
-        )}
-        {/* Null when the link was disabled by anyone but its owner: the destination stays hidden. */}
-        {data.originalUrl !== null && (
-          <a
-            href={data.originalUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="block text-[0.8rem] break-all text-ink-muted"
-          >
-            {data.originalUrl}
-          </a>
-        )}
+        <h1 className="mb-2 text-lg font-semibold break-all">
+          {/* An expired link no longer redirects, so its short URL is shown as plain text. */}
+          {expired ? (
+            <span className="block text-ink-muted">{data.shortUrl}</span>
+          ) : (
+            <a href={data.shortUrl} target="_blank" rel="noopener noreferrer" className="block text-tomato-deep">
+              {data.shortUrl}
+            </a>
+          )}
+        </h1>
+        <Destination originalUrl={data.originalUrl} originalHref={data.originalHref} />
       </div>
 
       {expired && data.expiresAt && (
