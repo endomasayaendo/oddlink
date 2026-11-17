@@ -1,4 +1,5 @@
 import { LineChart } from "@oddlink/ui/charts";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
@@ -12,6 +13,12 @@ import { StatCard } from "@/ui/analytics/stat-card";
 function formatDay(day: string): string {
   return new Date(`${day}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 }
+
+// Analytics are for the person holding the link, not for search results. Static, so the robots
+// meta is part of the prerendered shell whatever the lookup below finds.
+export const metadata: Metadata = {
+  robots: { index: false, follow: false },
+};
 
 export default function AnalyticsPage({ params }: PageProps<"/analytics/[shortCode]">) {
   return (
