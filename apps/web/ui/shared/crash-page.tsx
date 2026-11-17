@@ -16,15 +16,20 @@ export function CrashPage({ error, retry }: Props) {
     console.error(error);
   }, [error]);
 
+  // Error boundaries are client components and can't export metadata. React hoists this <title>
+  // into <head> ahead of the layout's, so the tab names the failure.
   return (
-    <ErrorPage
-      code="Oops"
-      message="Something went wrong. Please try again."
-      action={
-        <button type="button" onClick={() => retry()} className={`${buttonClass} px-6 py-3`}>
-          Try again
-        </button>
-      }
-    />
+    <>
+      <title>Something went wrong - OddLink</title>
+      <ErrorPage
+        code="Oops"
+        message="Something went wrong. Please try again."
+        action={
+          <button type="button" onClick={() => retry()} className={`${buttonClass} px-6 py-3`}>
+            Try again
+          </button>
+        }
+      />
+    </>
   );
 }

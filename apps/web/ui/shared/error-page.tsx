@@ -21,7 +21,7 @@ export function ErrorPage({ code, message, action }: Props) {
   const tail = code.slice(-1);
 
   return (
-    <div className="relative isolate flex min-h-screen items-center justify-center overflow-hidden bg-paper-old px-4 py-32">
+    <main className="relative isolate flex min-h-screen items-center justify-center overflow-hidden bg-paper-old px-4 py-32">
       <HalfLidSun className="absolute bottom-[14%] left-[8%] -z-30 size-24 sm:left-[16%] sm:size-32" />
       <div aria-hidden="true" className="rust-corners absolute inset-0 -z-20" />
       <RustBleed className="absolute inset-x-0 top-0 -z-20" />
@@ -46,7 +46,7 @@ export function ErrorPage({ code, message, action }: Props) {
           </span>
           <span className="sr-only">{code}</span>
         </p>
-        <p className={`mb-10 font-hand text-xl text-ink sm:text-2xl animate-flicker-late ${stillWhenReduced}`}>{message}</p>
+        <h1 className={`mb-10 font-hand text-xl text-ink sm:text-2xl animate-flicker-late ${stillWhenReduced}`}>{message}</h1>
         <div className="relative inline-block">
           {action ?? (
             <Link href="/" className={`${buttonClass} px-6 py-3`}>
@@ -56,6 +56,6 @@ export function ErrorPage({ code, message, action }: Props) {
           <RustDrip className="absolute top-full left-1/2 -translate-x-1/2" />
         </div>
       </div>
-    </div>
+    </main>
   );
 }
