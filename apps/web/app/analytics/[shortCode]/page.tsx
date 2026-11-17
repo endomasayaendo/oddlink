@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { getAnalytics } from "@/lib/analytics/get-analytics";
 import { formatDate } from "@/lib/format-date";
+import { shortCodeFromParams } from "@/lib/links/short-code-param";
 import { FLAGGED_REASON, isFlagged } from "@/lib/links/gone";
 import { StatCard } from "@/ui/analytics/stat-card";
 
@@ -29,7 +30,7 @@ export default function AnalyticsPage({ params }: PageProps<"/analytics/[shortCo
 }
 
 async function AnalyticsContent({ params }: Pick<PageProps<"/analytics/[shortCode]">, "params">) {
-  const { shortCode } = await params;
+  const shortCode = await shortCodeFromParams(params);
   const data = await getAnalytics(shortCode);
   // The proxy answers deleted links before this page runs.
   if (!data || data.state === "deleted") notFound();
