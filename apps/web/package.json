@@ -23,11 +23,11 @@
     "@oddlink/ui": "workspace:*",
     "@oddlink/utils": "workspace:*",
     "drizzle-orm": "^0.45.4",
-    "next": "16.4.3",
+    "next": "16.4.6",
     "pg": "^8.23.1",
-    "react": "19.3.0",
-    "react-dom": "19.3.0",
-    "tldts": "^7.4.22",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "tldts": "^7.5.2",
     "zod": "^4.6.7"
   },
   "devDependencies": {
@@ -40,10 +40,10 @@
     "@types/react-dom": "^19",
     "drizzle-kit": "^0.31.11",
     "eslint": "^9",
-    "eslint-config-next": "16.4.3",
+    "eslint-config-next": "16.4.6",
     "tailwindcss": "^4",
     "tsx": "^4.23.15",
     "typescript": "^5",
-    "vitest": "^5.0.5"
+    "vitest": "^5.1.0"
   }
 }

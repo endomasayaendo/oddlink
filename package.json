@@ -20,7 +20,7 @@
     "db:studio": "pnpm --filter web db:studio"
   },
   "devDependencies": {
-    "turbo": "^2.11.10"
+    "turbo": "^2.11.11"
   },
   "packageManager": "pnpm@12.15.0"
 }
