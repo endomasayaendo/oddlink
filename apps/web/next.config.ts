@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { noindexHeaderRules } from "./lib/http/robots-headers";
 import { securityHeaders } from "./lib/http/security-headers";
 
 const nextConfig: NextConfig = {
@@ -8,7 +9,10 @@ const nextConfig: NextConfig = {
   partialPrefetching: true,
   async headers() {
     const env = process.env.NODE_ENV;
-    return [{ source: "/:path*", headers: securityHeaders({ dev: env === "development", production: env === "production" }) }];
+    return [
+      { source: "/:path*", headers: securityHeaders({ dev: env === "development", production: env === "production" }) },
+      ...noindexHeaderRules(),
+    ];
   },
   turbopack: {
     rules: {

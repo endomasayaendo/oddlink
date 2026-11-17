@@ -16,6 +16,36 @@ const listeners = new Set<() => void>();
 let cachedRaw: string | null = null;
 let cachedEntries: HistoryEntry[] = EMPTY;
 
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0;
+}
+
+function isHistoryEntry(value: unknown): value is HistoryEntry {
+  if (typeof value !== "object" || value === null) return false;
+  const entry = value as Record<string, unknown>;
+  return isNonEmptyString(entry.shortCode) && isNonEmptyString(entry.shortUrl) && isNonEmptyString(entry.originalUrl);
+}
+
+// Keeps well-formed entries (with any extra fields they carry) and drops later duplicates of a shortCode.
+export function parseHistory(raw: string | null): HistoryEntry[] {
+  if (!raw) return EMPTY;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return EMPTY;
+  }
+  if (!Array.isArray(parsed)) return EMPTY;
+  const seen = new Set<string>();
+  const entries: HistoryEntry[] = [];
+  for (const item of parsed) {
+    if (!isHistoryEntry(item) || seen.has(item.shortCode)) continue;
+    seen.add(item.shortCode);
+    entries.push(item);
+  }
+  return entries;
+}
+
 function readRaw(): string | null {
   try {
     return localStorage.getItem(STORAGE_KEY);
@@ -29,12 +59,7 @@ function getSnapshot(): HistoryEntry[] {
   const raw = readRaw();
   if (raw !== cachedRaw) {
     cachedRaw = raw;
-    try {
-      const parsed: unknown = raw ? JSON.parse(raw) : [];
-      cachedEntries = Array.isArray(parsed) ? parsed : EMPTY;
-    } catch {
-      cachedEntries = EMPTY;
-    }
+    cachedEntries = parseHistory(raw);
   }
   return cachedEntries;
 }
