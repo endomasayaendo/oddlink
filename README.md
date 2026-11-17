@@ -220,6 +220,15 @@ unset DATABASE_URL
 
 ---
 
+## Deploying to Vercel
+
+Create the Vercel project with **Root Directory** set to `apps/web`; Vercel installs and builds from there, so it reads the Node.js version from `apps/web/package.json`.
+
+- **Node.js version:** `apps/web/package.json` pins `"engines": { "node": "26.x" }`, the same major as `.nvmrc` and CI. Vercel's `engines.node` overrides the project's **Node.js Version** setting (Settings → Build and Deployment), but set that to **26.x** too so the two never disagree. Keep a single `N.x` major: an open range such as `>=26` lets Vercel move to a newer major on its own. To change the major, update `.nvmrc`, `apps/web` `engines` and `@types/node` together, and keep the root `engines` range admitting it; `apps/web/tests/node-version.test.ts` fails if they disagree.
+- **Environment variables:** see [Environment Variables](#environment-variables); set the production ones for Preview as well as Production.
+
+---
+
 ## Environment Variables
 
 Set in `apps/web/.env`, or in the shell (`turbo.json` passes these through to the tasks).
