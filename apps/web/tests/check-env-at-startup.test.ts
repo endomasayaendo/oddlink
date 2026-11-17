@@ -89,4 +89,55 @@ describe("checkEnvAtStartup", () => {
     expect(output).toContain("- ISSUE_RATE_LIMIT_WINDOW_SECONDS:");
     expect(output).not.toContain("short-secret-value");
   });
+
+  describe("with the .env.example URLs", () => {
+    function stubLocalProduction() {
+      vi.stubEnv("NODE_ENV", "production");
+      vi.stubEnv("BASE_URL", "http://localhost:3000");
+      vi.stubEnv("DATABASE_URL", "postgres://postgres:s3cr3t-pa55@localhost:5432/oddlink");
+      vi.stubEnv("SAFE_BROWSING_API_KEY", "test-key");
+      vi.stubEnv("RATE_LIMIT_SECRET", "x".repeat(32));
+      vi.stubEnv("ISSUE_RATE_LIMIT_MAX", "5");
+      vi.stubEnv("ISSUE_RATE_LIMIT_WINDOW_SECONDS", "60");
+      vi.stubEnv("VERCEL", "");
+      vi.stubEnv("VERCEL_ENV", "");
+    }
+
+    it("exits 1 in production, without echoing DATABASE_URL", async () => {
+      stubLocalProduction();
+      vi.stubEnv("ALLOW_LOCAL_PRODUCTION", "");
+      const exit = vi.spyOn(process, "exit").mockImplementation((() => undefined) as never);
+      const log = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      (await load())();
+      expect(exit).toHaveBeenCalledWith(1);
+      const output = log.mock.calls.flat().join("\n");
+      expect(output).toContain("- BASE_URL: must use https in production");
+      expect(output).toContain("- DATABASE_URL: must not point to localhost");
+      expect(output).not.toContain("s3cr3t-pa55");
+    });
+
+    it("starts with ALLOW_LOCAL_PRODUCTION=1", async () => {
+      stubLocalProduction();
+      vi.stubEnv("ALLOW_LOCAL_PRODUCTION", "1");
+      const exit = vi.spyOn(process, "exit").mockImplementation((() => undefined) as never);
+
+      (await load())();
+      expect(exit).not.toHaveBeenCalled();
+    });
+
+    it("still exits 1 with ALLOW_LOCAL_PRODUCTION=1 on Vercel", async () => {
+      stubLocalProduction();
+      vi.stubEnv("ALLOW_LOCAL_PRODUCTION", "1");
+      vi.stubEnv("VERCEL", "1");
+      const exit = vi.spyOn(process, "exit").mockImplementation((() => undefined) as never);
+      const log = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      (await load())();
+      expect(exit).toHaveBeenCalledWith(1);
+      expect(log.mock.calls.flat().join("\n")).toContain(
+        "- ALLOW_LOCAL_PRODUCTION: must not be set on Vercel",
+      );
+    });
+  });
 });

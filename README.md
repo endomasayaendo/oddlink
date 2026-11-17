@@ -238,25 +238,35 @@ Set in `apps/web/.env`, or in the shell (`turbo.json` passes these through to th
 
 | Variable | Default | Required | Description |
 |----------|---------|----------|-------------|
-| `DATABASE_URL` | — | In production | Postgres connection string (`postgres://` or `postgresql://`). TLS query parameters (`sslmode`, `ssl`, `sslrootcert`, …) are rejected: TLS is set by `DATABASE_CA_CERT` |
+| `DATABASE_URL` | — | In production | Postgres connection string (`postgres://` or `postgresql://`). In production it must not point to this machine (see below). TLS query parameters (`sslmode`, `ssl`, `sslrootcert`, …) are rejected: TLS is set by `DATABASE_CA_CERT` |
 | `DATABASE_CA_CERT` | — | In production, and whenever `DATABASE_URL` is not on this machine | CA certificate the database server must chain to, as PEM text (newlines, or literal `\n` on one line) or that PEM base64-encoded. When set, the app connects over TLS and verifies the certificate and host name; when unset, it connects without TLS, which is only accepted for a database on this machine (see [Database connection](#database-connection)) |
-| `ALLOW_LOCAL_PRODUCTION` | — | No | `1` lets a production process run without `DATABASE_CA_CERT` when `DATABASE_URL` points to this machine (a local `pnpm build && pnpm start`). Ignored on Vercel |
-| `BASE_URL` | `http://localhost:3000` | In production | Absolute `http`/`https` URL used in generated short links; no credentials, query or fragment; trailing slashes are removed |
+| `ALLOW_LOCAL_PRODUCTION` | — | No | `1` lets a production process on this machine use local URLs (see below) and, with a local `DATABASE_URL`, run without `DATABASE_CA_CERT`. An error on Vercel |
+| `BASE_URL` | `http://localhost:3000` | In production | Absolute `http`/`https` URL used in generated short links; no credentials, query or fragment; trailing slashes are removed. In production it must be `https` and must not point to this machine (see below) |
 | `SAFE_BROWSING_API_KEY` | — | In production | Google Safe Browsing API key used to refuse phishing/malware URLs when issuing. Without it (dev, tests) the check is skipped with one warning |
 | `RATE_LIMIT_SECRET` | dev-only value | In production | Secret (32+ characters, e.g. `openssl rand -hex 32`) used to HMAC client addresses for rate limiting |
 | `ISSUE_RATE_LIMIT_MAX` | dev-only value | In production | Links one client may issue per window (positive integer) |
 | `ISSUE_RATE_LIMIT_WINDOW_SECONDS` | dev-only value | In production | Rate-limit window length in seconds (positive integer) |
+| `ALLOW_LOCAL_PRODUCTION` | — | No | `1` lets a production build run on your machine with local `BASE_URL` / `DATABASE_URL` (see below). An error on Vercel; never set it in a deploy environment |
 | `APP_TIME_ZONE` | `Asia/Tokyo` | No | IANA time zone name (e.g. `Asia/Tokyo`, `UTC`) for daily click counts and dates; offsets like `+09:00` are rejected |
 | `TEST_DATABASE_URL` | — | For `pnpm test` | Database used by the tests (not read by the app) |
 | `DB_NAME` / `DB_USERNAME` / `DB_PASSWORD` | `oddlink` / `postgres` / `postgres` | No | Used by `apps/web/docker-compose.yml` |
 
 The app validates these at startup (`apps/web/lib/env.ts`). In production (`next start`), a missing `BASE_URL`, `DATABASE_URL`, `DATABASE_CA_CERT`, `SAFE_BROWSING_API_KEY`, `RATE_LIMIT_SECRET`, `ISSUE_RATE_LIMIT_MAX` or `ISSUE_RATE_LIMIT_WINDOW_SECONDS`, or any malformed value, prints every problem and exits. In development and tests, missing values fall back to the defaults. `next build` needs none of them.
 
+Production also refuses local URLs, so values copied from `.env.example` into a deploy environment fail at startup instead of issuing `localhost` short links: `BASE_URL` must use `https`, and neither `BASE_URL` nor `DATABASE_URL` may point to this machine (`localhost`, `*.localhost`, `127.0.0.0/8`, `0.0.0.0`, `::1`, `::`, or for the database an empty host or a Unix socket). To try a production build locally, opt in explicitly:
+
+```bash
+pnpm build
+ALLOW_LOCAL_PRODUCTION=1 pnpm start      # or uncomment it in apps/web/.env
+```
+
+`ALLOW_LOCAL_PRODUCTION=1` lifts only these local-URL rules, and with a local `DATABASE_URL` the `DATABASE_CA_CERT` requirement; everything else (the required variables, URL shapes) is still checked. Only the exact value `1` is accepted, and when Vercel's system variables (`VERCEL`, `VERCEL_ENV`) are present it is itself an error, at build and at startup, so it cannot switch the rules off in a Vercel deployment.
+
 ### Database connection
 
 The pool (`apps/web/lib/db/index.ts`) is sized for serverless functions, where every instance holds its own pool: at most 5 connections, idle ones closed after 5 seconds, and `attachDatabasePool` from `@vercel/functions` keeps a Vercel function alive until released connections pass that idle timeout, so they are closed rather than left open while the instance is suspended. Off Vercel it does not wait for anything.
 
-**TLS.** With `DATABASE_CA_CERT` set, the connection uses TLS with `rejectUnauthorized: true` and Node's host-name check, the equivalent of libpq `sslmode=verify-full`; verification is never turned off. Without it, the connection is plain TCP, which is what the local Docker Postgres expects; a `DATABASE_URL` pointing to another machine is refused in every mode (dev servers and operator commands included), so the password never crosses the network in plain text. Production refuses to start without `DATABASE_CA_CERT` unless `DATABASE_URL` points to this machine and `ALLOW_LOCAL_PRODUCTION=1` is set (never on Vercel).
+**TLS.** With `DATABASE_CA_CERT` set, the connection uses TLS with `rejectUnauthorized: true` and Node's host-name check, the equivalent of libpq `sslmode=verify-full`; verification is never turned off. Without it, the connection is plain TCP, which is what the local Docker Postgres expects; a `DATABASE_URL` pointing to another machine is refused in every mode (dev servers and operator commands included), so the password never crosses the network in plain text. Production refuses to start without `DATABASE_CA_CERT` unless `DATABASE_URL` points to this machine and `ALLOW_LOCAL_PRODUCTION=1` is set (an error on Vercel).
 
 `DATABASE_URL` must not carry TLS query parameters. node-postgres parses the connection string and lets it override the `ssl` option, so `?sslmode=require` would drop the CA, `?sslmode=disable` would turn TLS off and `?sslmode=no-verify` would turn verification off; rejecting them keeps `DATABASE_CA_CERT` the only switch. `PGSSLMODE` in the environment is ignored for the same reason.
 

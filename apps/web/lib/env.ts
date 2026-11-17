@@ -1,6 +1,6 @@
 import { X509Certificate } from "node:crypto";
 import { z } from "zod";
-import { databaseHost, isLocalDatabaseHost, tlsQueryParams } from "@/lib/db/connection-url";
+import { databaseHost, isLocalDatabaseHost, isLocalHost, tlsQueryParams } from "@/lib/db/connection-url";
 
 // Server-only: this reads `process.env` and the parsed result includes DATABASE_URL (a secret).
 // Never import it from a client component.
@@ -42,7 +42,8 @@ const DEV_ISSUE_RATE_LIMIT_WINDOW_SECONDS = 60;
 /**
  * - `build`: `next build` (Next sets NEXT_PHASE during it, and build workers inherit it). CI builds
  *   without DATABASE_URL on purpose, so missing values are tolerated.
- * - `runtime`: `next start` or any other production process. Missing required values are errors.
+ * - `runtime`: `next start` or any other production process. Missing required values are errors,
+ *   and so are local URLs (see `ALLOW_LOCAL_PRODUCTION`).
  * - `lenient`: dev and tests. Missing values fall back to local defaults.
  *
  * The literal below is `PHASE_PRODUCTION_BUILD` from `next/constants`; it is inlined to keep this
@@ -52,6 +53,26 @@ export function resolveMode(source: EnvSource): EnvMode {
   if (source.NEXT_PHASE === "phase-production-build") return "build";
   if (source.NODE_ENV === "production") return "runtime";
   return "lenient";
+}
+
+/**
+ * Opt-in for running a production build on this machine (`next build && next start`), where
+ * BASE_URL and DATABASE_URL point to localhost. Only the exact value "1" enables it, and it is
+ * refused whenever Vercel's system variables are present, so it cannot weaken a real deployment.
+ */
+const ALLOW_LOCAL_PRODUCTION = "ALLOW_LOCAL_PRODUCTION";
+const LOCAL_HINT = `(${ALLOW_LOCAL_PRODUCTION}=1 allows this outside Vercel, for a local production run)`;
+
+// Vercel system variables, present in its Production and Preview deployments at build and runtime.
+function isOnVercel(source: EnvSource): boolean {
+  return Boolean(source.VERCEL || source.VERCEL_ENV);
+}
+
+/** True when `raw` is a connection string whose server is on this machine. */
+function isLocalDatabaseUrl(raw: string | undefined): boolean {
+  if (!raw) return false;
+  const host = databaseHost(raw);
+  return host !== undefined && isLocalDatabaseHost(host);
 }
 
 // Treat an empty string (`BASE_URL=` in a .env file) as unset.
@@ -96,7 +117,8 @@ const baseUrlValue = z.string().transform((raw, ctx) => {
 
 const databaseUrlValue = z
   .string()
-  // Shape only, via a regex: a parser's error message could echo the secret.
+  // Shape only, via a regex: a parser's error message could echo the secret. The host checks
+  // parse it separately and discard any parse error.
   .regex(/^postgres(ql)?:\/\//, { error: "must start with postgres:// or postgresql://" })
   .superRefine((value, ctx) => {
     // Only parameter names reach the message, never their values or the rest of the URL.
@@ -151,24 +173,38 @@ const caCertValue = z.string().transform((raw, ctx) => {
   return blocks.map(([block]) => block).join("\n") + "\n";
 });
 
-/**
- * Opt-in for a production process on this machine against a local database (`next build &&
- * next start` with the Docker Postgres), which then may run without DATABASE_CA_CERT. Only the
- * exact value "1" counts, and never when Vercel's system variables are present.
- */
-const ALLOW_LOCAL_PRODUCTION = "ALLOW_LOCAL_PRODUCTION";
-
-function isOnVercel(source: EnvSource): boolean {
-  return Boolean(source.VERCEL || source.VERCEL_ENV);
+// Production-only rules, applied after the shape checks above. `allowLocal` lifts them.
+function productionBaseUrl(allowLocal: boolean) {
+  return z.string().superRefine((value, ctx) => {
+    if (allowLocal) return;
+    const url = new URL(value);
+    if (url.protocol !== "https:") {
+      ctx.addIssue({ code: "custom", message: `must use https in production ${LOCAL_HINT}` });
+    }
+    if (isLocalHost(url.hostname)) {
+      ctx.addIssue({
+        code: "custom",
+        message: `must not point to localhost or a loopback address in production ${LOCAL_HINT}`,
+      });
+    }
+  });
 }
 
-/** True when production may connect without TLS: opted in, off Vercel, and the database is local. */
-function allowsPlaintextDatabase(source: EnvSource): boolean {
-  if (source[ALLOW_LOCAL_PRODUCTION] !== "1" || isOnVercel(source)) return false;
-  const raw = emptyAsUnset(source.DATABASE_URL);
-  if (typeof raw !== "string") return false;
-  const host = databaseHost(raw);
-  return host !== undefined && isLocalDatabaseHost(host);
+function productionDatabaseUrl(allowLocal: boolean) {
+  return z.string().superRefine((value, ctx) => {
+    const host = databaseHost(value);
+    if (host === undefined) {
+      ctx.addIssue({ code: "custom", message: "must be a valid connection URL" });
+      return;
+    }
+    if (allowLocal) return;
+    if (isLocalDatabaseHost(host)) {
+      ctx.addIssue({
+        code: "custom",
+        message: `must not point to localhost, a loopback address or a Unix socket in production ${LOCAL_HINT}`,
+      });
+    }
+  });
 }
 
 const timeZoneValue = z.string().refine(
@@ -208,11 +244,22 @@ const positiveIntValue = z
       .max(INT4_MAX - 1, { error: "is too large" }),
   );
 
-function buildSchema(mode: EnvMode, { caOptional }: { caOptional: boolean }) {
+type SchemaContext = { onVercel: boolean; allowLocal: boolean; caOptional: boolean };
+
+function buildSchema(mode: EnvMode, { onVercel, allowLocal, caOptional }: SchemaContext) {
   const baseUrl =
-    mode === "runtime" ? requiredWhen(mode, "BASE_URL").pipe(baseUrlValue) : baseUrlValue;
+    mode === "runtime"
+      ? requiredWhen(mode, "BASE_URL").pipe(baseUrlValue).pipe(productionBaseUrl(allowLocal))
+      : baseUrlValue;
   const databaseUrl =
-    mode === "runtime" ? requiredWhen(mode, "DATABASE_URL").pipe(databaseUrlValue) : databaseUrlValue;
+    mode === "runtime"
+      ? requiredWhen(mode, "DATABASE_URL")
+          .pipe(databaseUrlValue)
+          .pipe(productionDatabaseUrl(allowLocal))
+      : databaseUrlValue;
+  const allowLocalProduction = z
+    .literal("1", { error: "must be 1 or unset" })
+    .refine(() => mode === "lenient" || !onVercel, { error: "must not be set on Vercel" });
 
   return z.object({
     BASE_URL: z.preprocess(
@@ -261,6 +308,7 @@ function buildSchema(mode: EnvMode, { caOptional }: { caOptional: boolean }) {
         ? requiredWhen(mode, "ISSUE_RATE_LIMIT_WINDOW_SECONDS").pipe(positiveIntValue)
         : positiveIntValue.default(DEV_ISSUE_RATE_LIMIT_WINDOW_SECONDS),
     ),
+    [ALLOW_LOCAL_PRODUCTION]: z.preprocess(emptyAsUnset, allowLocalProduction.optional()),
   }).superRefine((env, ctx) => {
     // In every mode (dev servers and operator commands included), a database that is not on this
     // machine is only reached over verified TLS, so the password never crosses the network in
@@ -282,7 +330,11 @@ function buildSchema(mode: EnvMode, { caOptional }: { caOptional: boolean }) {
  * SAFE_BROWSING_API_KEY and RATE_LIMIT_SECRET are secrets.
  */
 export function parseEnv(source: EnvSource, mode: EnvMode): Env {
-  const result = buildSchema(mode, { caOptional: allowsPlaintextDatabase(source) }).safeParse({
+  const onVercel = isOnVercel(source);
+  const allowLocal = mode === "runtime" && !onVercel && source[ALLOW_LOCAL_PRODUCTION] === "1";
+  // A local production run against the Docker Postgres may skip TLS; any other database may not.
+  const caOptional = allowLocal && isLocalDatabaseUrl(source.DATABASE_URL);
+  const result = buildSchema(mode, { onVercel, allowLocal, caOptional }).safeParse({
     BASE_URL: source.BASE_URL,
     DATABASE_URL: source.DATABASE_URL,
     DATABASE_CA_CERT: source.DATABASE_CA_CERT,
@@ -291,12 +343,16 @@ export function parseEnv(source: EnvSource, mode: EnvMode): Env {
     RATE_LIMIT_SECRET: source.RATE_LIMIT_SECRET,
     ISSUE_RATE_LIMIT_MAX: source.ISSUE_RATE_LIMIT_MAX,
     ISSUE_RATE_LIMIT_WINDOW_SECONDS: source.ISSUE_RATE_LIMIT_WINDOW_SECONDS,
+    [ALLOW_LOCAL_PRODUCTION]: source[ALLOW_LOCAL_PRODUCTION],
   });
   if (!result.success) {
     const lines = result.error.issues.map((issue) => `- ${issue.path.join(".")}: ${issue.message}`);
     throw new Error(`Invalid environment variables:\n${lines.join("\n")}`);
   }
-  return result.data as Env;
+  // The opt-in is validated above but is not part of Env.
+  return Object.fromEntries(
+    Object.entries(result.data).filter(([key]) => key !== ALLOW_LOCAL_PRODUCTION),
+  ) as Env;
 }
 
 let cached: Env | undefined;

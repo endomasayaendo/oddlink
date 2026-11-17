@@ -50,12 +50,11 @@ export function databaseHost(raw: string): string | undefined {
 }
 
 /**
- * True for hosts on this machine: localhost and *.localhost, 127.0.0.0/8, 0.0.0.0, ::1, ::, the
- * IPv4-mapped forms of those, an empty host and Unix sockets. Parsing as an http URL first
- * canonicalizes spellings such as 127.1, 0x7f.0.0.1 and 0:0:0:0:0:0:0:1.
+ * True for names that reach this machine: localhost and *.localhost, 127.0.0.0/8, 0.0.0.0, ::1, ::
+ * and the IPv4-mapped forms of those. Parsing as an http URL first canonicalizes spellings such as
+ * 127.1, 0x7f.0.0.1, 2130706433 and 0:0:0:0:0:0:0:1.
  */
-export function isLocalDatabaseHost(host: string): boolean {
-  if (host === "" || host.startsWith("/")) return true;
+export function isLocalHost(host: string): boolean {
   let name = host.toLowerCase();
   const bracketed = name.includes(":") && !name.startsWith("[") ? `[${name}]` : name;
   try {
@@ -73,4 +72,9 @@ export function isLocalDatabaseHost(host: string): boolean {
     name === "::" ||
     /^::ffff:(7f[0-9a-f]{2}:[0-9a-f]{1,4}|0:0)$/.test(name)
   );
+}
+
+/** True for a database server on this machine: a local host name, an empty host or a Unix socket. */
+export function isLocalDatabaseHost(host: string): boolean {
+  return host === "" || host.startsWith("/") || isLocalHost(host);
 }
