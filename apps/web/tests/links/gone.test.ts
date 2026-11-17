@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GONE_VARIANTS, goneMessage, goneVariant } from "@/lib/links/gone";
 import { GONE_PAGE_TIMEOUT_MS, serveGone } from "@/lib/middleware/utils/serve-gone";
 import { stubGonePages } from "../utils/stub-gone-page";
@@ -92,19 +92,90 @@ describe("serveGone", () => {
     expect(await res.text()).toBe("This link was disabled.");
   });
 
-  it("fetches each page once per process in production, and again after a failure", async () => {
+  async function loadProduction() {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("SAFE_BROWSING_API_KEY", "test-only");
-    const { serveGone: serve } = await import("@/lib/middleware/utils/serve-gone");
+    const mod = await import("@/lib/middleware/utils/serve-gone");
     vi.spyOn(console, "error").mockImplementation(() => {});
-    const fetch = stubGonePages().mockRejectedValueOnce(new Error("not up yet"));
-    expect((await serve({ state: "disabled", by: "owner" })).headers.get("content-type")).toContain("text/plain");
-    for (let i = 0; i < 2; i++) expect((await serve({ state: "disabled", by: "owner" })).headers.get("content-type")).toContain("text/html");
+    return mod;
+  }
+
+  const contentType = async (res: Promise<Response>) => (await res).headers.get("content-type");
+
+  it("fetches each page once per process in production", async () => {
+    const { serveGone: serve } = await loadProduction();
+    const fetch = stubGonePages();
+    for (let i = 0; i < 3; i++) expect(await contentType(serve({ state: "disabled", by: "owner" }))).toContain("text/html");
     await serve({ state: "deleted", by: "owner" });
     expect(fetch.mock.calls.map(([url]) => url)).toEqual([
       "http://localhost:3000/gone/disabled",
-      "http://localhost:3000/gone/disabled",
       "http://localhost:3000/gone/deleted",
     ]);
+  });
+
+  describe("after a failed fetch in production", () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("answers with the plain-text 410 without fetching again until the retry delay has passed", async () => {
+      const { serveGone: serve, GONE_PAGE_RETRY_AFTER_MS } = await loadProduction();
+      const fetch = stubGonePages().mockRejectedValueOnce(new Error("not up yet"));
+      expect(await contentType(serve({ state: "disabled", by: "owner" }))).toContain("text/plain");
+      expect(fetch).toHaveBeenCalledTimes(1);
+
+      vi.advanceTimersByTime(GONE_PAGE_RETRY_AFTER_MS - 1);
+      for (let i = 0; i < 3; i++) {
+        const res = await serve({ state: "disabled", by: "owner" });
+        expect(res.status).toBe(410);
+        expect(res.headers.get("content-type")).toBe("text/plain; charset=utf-8");
+        expect(res.headers.get("cache-control")).toBe(NO_STORE_CACHE_CONTROL);
+        expect(res.headers.get("x-robots-tag")).toBe("noindex");
+        expect(await res.text()).toBe("This link was disabled.");
+      }
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(console.error).toHaveBeenCalledTimes(1);
+
+      vi.advanceTimersByTime(1);
+      expect(await contentType(serve({ state: "disabled", by: "owner" }))).toContain("text/html");
+      expect(await contentType(serve({ state: "disabled", by: "owner" }))).toContain("text/html");
+      expect(fetch).toHaveBeenCalledTimes(2);
+    });
+
+    it("waits again after another failure once the delay has passed", async () => {
+      const { serveGone: serve, GONE_PAGE_RETRY_AFTER_MS } = await loadProduction();
+      const fetch = stubGonePages().mockRejectedValueOnce(new Error("down")).mockRejectedValueOnce(new Error("still down"));
+      await serve({ state: "disabled", by: "owner" });
+      vi.advanceTimersByTime(GONE_PAGE_RETRY_AFTER_MS);
+      expect(await contentType(serve({ state: "disabled", by: "owner" }))).toContain("text/plain");
+      expect(await contentType(serve({ state: "disabled", by: "owner" }))).toContain("text/plain");
+      expect(fetch).toHaveBeenCalledTimes(2);
+      vi.advanceTimersByTime(GONE_PAGE_RETRY_AFTER_MS);
+      expect(await contentType(serve({ state: "disabled", by: "owner" }))).toContain("text/html");
+      expect(fetch).toHaveBeenCalledTimes(3);
+    });
+
+    it("keeps fetching the other pages", async () => {
+      const { serveGone: serve } = await loadProduction();
+      const fetch = stubGonePages().mockRejectedValueOnce(new Error("not up yet"));
+      await serve({ state: "disabled", by: "owner" });
+      expect(await contentType(serve({ state: "deleted", by: "owner" }))).toContain("text/html");
+      expect(fetch.mock.calls.map(([url]) => url)).toEqual([
+        "http://localhost:3000/gone/disabled",
+        "http://localhost:3000/gone/deleted",
+      ]);
+    });
+  });
+
+  it("fetches again on every request outside production, even after a failure", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const fetch = stubGonePages().mockRejectedValueOnce(new Error("not up yet"));
+    expect(await contentType(serveGone({ state: "disabled", by: "owner" }))).toContain("text/plain");
+    expect(await contentType(serveGone({ state: "disabled", by: "owner" }))).toContain("text/html");
+    expect(await contentType(serveGone({ state: "disabled", by: "owner" }))).toContain("text/html");
+    expect(fetch).toHaveBeenCalledTimes(3);
   });
 });

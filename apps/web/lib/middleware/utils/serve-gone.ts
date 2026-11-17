@@ -22,6 +22,12 @@ const GONE_HEADERS = {
 const pages = new Map<GoneVariant, Promise<string>>();
 const memoize = process.env.NODE_ENV === "production";
 
+// Outside development, a failed fetch is not retried for this long, so an origin that can't be
+// reached doesn't make every gone response wait for the timeout; the plain-text 410 goes out
+// straight away in the meantime.
+export const GONE_PAGE_RETRY_AFTER_MS = 30_000;
+const retryAt = new Map<GoneVariant, number>();
+
 // A slow or hanging origin must not hold the response (or, once memoized, every later one): past
 // this, the 410 goes out with the plain-text wording.
 export const GONE_PAGE_TIMEOUT_MS = 2000;
@@ -40,13 +46,21 @@ async function fetchGonePage(variant: GoneVariant): Promise<string> {
   return res.text();
 }
 
-function gonePage(variant: GoneVariant): Promise<string> {
+/** The gone page's HTML, or null while a recent failure to fetch it is waited out. */
+function gonePage(variant: GoneVariant): Promise<string> | null {
   const cached = pages.get(variant);
   if (cached) return cached;
+  if (Date.now() < (retryAt.get(variant) ?? 0)) return null;
   const page = fetchGonePage(variant);
   if (memoize) {
     pages.set(variant, page);
-    page.catch(() => pages.delete(variant));
+    page.then(
+      () => retryAt.delete(variant),
+      () => {
+        pages.delete(variant);
+        retryAt.set(variant, Date.now() + GONE_PAGE_RETRY_AFTER_MS);
+      },
+    );
   }
   return page;
 }
@@ -58,17 +72,20 @@ function gonePage(variant: GoneVariant): Promise<string> {
  */
 export async function serveGone(status: GoneStatus) {
   const variant = goneVariant(status);
-  try {
-    const html = await gonePage(variant);
-    return new NextResponse(html, {
-      status: GONE_STATUS,
-      headers: { ...GONE_HEADERS, "Content-Type": "text/html; charset=utf-8" },
-    });
-  } catch (error) {
-    console.error("Failed to load the gone page", error);
-    return new NextResponse(goneMessage(variant), {
-      status: GONE_STATUS,
-      headers: { ...GONE_HEADERS, "Content-Type": "text/plain; charset=utf-8" },
-    });
+  const page = gonePage(variant);
+  if (page) {
+    try {
+      const html = await page;
+      return new NextResponse(html, {
+        status: GONE_STATUS,
+        headers: { ...GONE_HEADERS, "Content-Type": "text/html; charset=utf-8" },
+      });
+    } catch (error) {
+      console.error("Failed to load the gone page", error);
+    }
   }
+  return new NextResponse(goneMessage(variant), {
+    status: GONE_STATUS,
+    headers: { ...GONE_HEADERS, "Content-Type": "text/plain; charset=utf-8" },
+  });
 }
