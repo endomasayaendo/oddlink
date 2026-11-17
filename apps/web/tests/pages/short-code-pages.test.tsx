@@ -1,38 +1,12 @@
-import { isValidElement, type ReactElement, type ReactNode } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import AnalyticsPage from "@/app/analytics/[shortCode]/page";
 import PreviewPage from "@/app/preview/[shortCode]/page";
 import { db } from "@/lib/db";
 import { urlMappings } from "@/lib/db/schema";
-import { nextShortCodeParam } from "../utils/next-page-param";
+import { findContent, NOT_FOUND, type Page, renderPage } from "../utils/render-page";
 import { resetUrlTables } from "../utils/reset-db";
 
 resetUrlTables();
-
-const NOT_FOUND = { digest: "NEXT_HTTP_ERROR_FALLBACK;404" };
-
-type ContentProps = { params: Promise<{ shortCode: string }> };
-type Page = (props: { params: Promise<{ shortCode: string }>; searchParams: Promise<Record<string, never>> }) => ReactNode;
-
-/** The async component inside the page's Suspense boundary, which reads the params and loads the link. */
-function findContent(node: ReactNode): ReactElement<ContentProps> & { type: (props: ContentProps) => Promise<ReactNode> } {
-  if (!isValidElement<{ children?: ReactNode } & Partial<ContentProps>>(node)) throw new Error("no content element");
-  if (typeof node.type === "function" && node.props.params) return node as never;
-  for (const child of [node.props.children].flat()) {
-    try {
-      return findContent(child);
-    } catch {}
-  }
-  throw new Error("no content element");
-}
-
-/** Renders `page` the way Next would for `pathname`, streaming content included. */
-async function renderPage(page: Page, route: string, pathname: string): Promise<string> {
-  const params = Promise.resolve({ shortCode: nextShortCodeParam(route, pathname) });
-  const content = findContent(page({ params, searchParams: Promise.resolve({}) }));
-  return renderToStaticMarkup(await content.type(content.props));
-}
 
 const pages: [string, Page, string][] = [
   ["analytics", AnalyticsPage as Page, "/analytics/[shortCode]"],
