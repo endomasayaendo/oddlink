@@ -79,6 +79,20 @@ describe("pingDatabase", () => {
     await expect(pingDatabase()).resolves.toBeUndefined();
   });
 
+  it("runs the query once, although drizzle's query object re-runs on every then", async () => {
+    let runs = 0;
+    const lazyQuery = {
+      then(onFulfilled?: (value: unknown) => unknown, onRejected?: (reason: unknown) => unknown) {
+        runs += 1;
+        return Promise.resolve([]).then(onFulfilled, onRejected);
+      },
+    };
+    vi.spyOn(db, "execute").mockReturnValue(lazyQuery as never);
+
+    await pingDatabase();
+    expect(runs).toBe(1);
+  });
+
   it("rejects once the timeout passes, even if the query never settles", async () => {
     vi.useFakeTimers();
     vi.spyOn(db, "execute").mockReturnValue(new Promise(() => {}) as never);

@@ -13,7 +13,9 @@ export async function pingDatabase(timeoutMs = PING_TIMEOUT_MS): Promise<void> {
   const timeout = new Promise<never>((_, reject) => {
     timer = setTimeout(() => reject(new Error(`Database ping timed out after ${timeoutMs} ms`)), timeoutMs);
   });
-  const query = db.execute(sql`SELECT 1`);
+  // Drizzle's query object runs the query again on every `then`, so it is turned into a single
+  // promise once and every handler below attaches to that.
+  const query = db.execute(sql`SELECT 1`).then(() => undefined);
   // A late rejection after the timeout won must not surface as an unhandled rejection.
   query.catch(() => {});
   try {
