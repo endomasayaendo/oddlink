@@ -1,13 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { parseEnv, resolveMode } from "@/lib/env";
+import { createTlsFixtures } from "./db/tls-fixtures";
 
 const PASSWORD = "s3cr3t-pa55";
 const validDb = `postgres://app:${PASSWORD}@db.example.com:5432/oddlink`;
 const SB_KEY = "AIzaSyTestSafeBrowsingKey-123";
 const RL_SECRET = "rl-secret-0123456789abcdef0123456789abcdef";
+const tls = createTlsFixtures();
+const CA = tls.caPem;
 const runtimeEnv = {
   BASE_URL: "https://oddl.ink",
   DATABASE_URL: validDb,
+  DATABASE_CA_CERT: CA,
   SAFE_BROWSING_API_KEY: SB_KEY,
   RATE_LIMIT_SECRET: RL_SECRET,
   ISSUE_RATE_LIMIT_MAX: "7",
@@ -54,6 +58,7 @@ describe("required values", () => {
     expect(parseEnv(runtimeEnv, "runtime")).toEqual({
       BASE_URL: "https://oddl.ink",
       DATABASE_URL: validDb,
+      DATABASE_CA_CERT: CA,
       APP_TIME_ZONE: "Asia/Tokyo",
       SAFE_BROWSING_API_KEY: SB_KEY,
       RATE_LIMIT_SECRET: RL_SECRET,
@@ -222,6 +227,144 @@ describe("DATABASE_URL", () => {
       expect(() => parse(value)).toThrow("- DATABASE_URL:");
     },
   );
+});
+
+describe("DATABASE_URL TLS parameters", () => {
+  it.each([
+    "sslmode=require",
+    "sslmode=verify-full",
+    "sslmode=disable",
+    "sslmode=no-verify",
+    "ssl=true",
+    "sslrootcert=/tmp/ca.pem",
+    "sslnegotiation=direct",
+    "uselibpqcompat=true",
+    "application_name=x&SSLMODE=require",
+  ])("rejects %s in every mode, naming only the parameter", (query) => {
+    for (const mode of ["build", "runtime", "lenient"] as const) {
+      const message = messageOf(() =>
+        parseEnv({ ...runtimeEnv, DATABASE_URL: `${validDb}?${query}` }, mode),
+      );
+      expect(message).toContain("- DATABASE_URL: must not set TLS options in the query string");
+      expect(message).toContain("TLS is configured by DATABASE_CA_CERT");
+      expect(message).not.toContain(PASSWORD);
+      expect(message).not.toContain("db.example.com");
+      expect(message).not.toContain("/tmp/ca.pem");
+    }
+  });
+
+  it("accepts other query parameters", () => {
+    const url = `${validDb}?application_name=oddlink&options=-c%20search_path%3Dpublic`;
+    expect(parseEnv({ ...runtimeEnv, DATABASE_URL: url }, "runtime").DATABASE_URL).toBe(url);
+  });
+});
+
+describe("DATABASE_CA_CERT", () => {
+  const parse = (DATABASE_CA_CERT: string | undefined, mode: "build" | "runtime" | "lenient" = "runtime") =>
+    parseEnv({ ...runtimeEnv, DATABASE_CA_CERT }, mode).DATABASE_CA_CERT;
+  const normalized = CA.trim() + "\n";
+
+  it("accepts PEM text and normalizes it", () => {
+    expect(parse(CA)).toBe(normalized);
+    expect(parse(`\n  ${CA}  \n`)).toBe(normalized);
+    expect(parse(CA.replace(/\n/g, "\r\n"))).toBe(normalized);
+  });
+
+  it("accepts PEM on one line with literal \\n escapes", () => {
+    expect(parse(CA.trim().replace(/\n/g, "\\n"))).toBe(normalized);
+  });
+
+  it("accepts the PEM encoded as base64, wrapped or not", () => {
+    const b64 = Buffer.from(CA).toString("base64");
+    expect(parse(b64)).toBe(normalized);
+    expect(parse(b64.replace(/(.{64})/g, "$1\n"))).toBe(normalized);
+  });
+
+  it("accepts a bundle of several certificates", () => {
+    const bundle = `${CA}${tls.otherCaPem}`;
+    expect(parse(bundle)).toBe(`${CA.trim()}\n${tls.otherCaPem.trim()}\n`);
+  });
+
+  it("is required at runtime and lists it with the other missing values", () => {
+    const message = messageOf(() => parseEnv({ ...runtimeEnv, DATABASE_CA_CERT: "" }, "runtime"));
+    expect(message).toContain(
+      "- DATABASE_CA_CERT: is required in production unless DATABASE_URL is local and ALLOW_LOCAL_PRODUCTION=1",
+    );
+  });
+
+  it("is optional in build and lenient modes, where unset means no TLS", () => {
+    for (const mode of ["build", "lenient"] as const) {
+      expect(parse(undefined, mode)).toBeUndefined();
+      expect(parse("", mode)).toBeUndefined();
+      expect(parse(CA, mode)).toBe(normalized);
+    }
+  });
+
+  describe("ALLOW_LOCAL_PRODUCTION", () => {
+    const local = "postgres://postgres:postgres@localhost:5432/oddlink";
+    const run = (extra: Record<string, string | undefined>) =>
+      parseEnv({ ...runtimeEnv, DATABASE_CA_CERT: undefined, ...extra }, "runtime");
+
+    it.each([
+      local,
+      "postgres://postgres:postgres@127.0.0.1:5432/oddlink",
+      "postgres://postgres:postgres@[::1]:5432/oddlink",
+      "postgres://postgres:postgres@/oddlink?host=/var/run/postgresql",
+    ])("lets production run without a CA against %s", (DATABASE_URL) => {
+      expect(run({ DATABASE_URL, ALLOW_LOCAL_PRODUCTION: "1" }).DATABASE_CA_CERT).toBeUndefined();
+    });
+
+    it("still uses the CA when one is set", () => {
+      expect(
+        run({ DATABASE_URL: local, ALLOW_LOCAL_PRODUCTION: "1", DATABASE_CA_CERT: CA })
+          .DATABASE_CA_CERT,
+      ).toBe(normalized);
+    });
+
+    it("does not apply to a remote database", () => {
+      expect(() => run({ ALLOW_LOCAL_PRODUCTION: "1" })).toThrow("- DATABASE_CA_CERT:");
+      expect(() =>
+        run({ DATABASE_URL: "postgres://u:p@db.example.com/x?host=localhost.example.com", ALLOW_LOCAL_PRODUCTION: "1" }),
+      ).toThrow("- DATABASE_CA_CERT:");
+    });
+
+    it.each(["true", "yes", "0", " 1"])("only counts the exact value 1 (not %j)", (value) => {
+      expect(() => run({ DATABASE_URL: local, ALLOW_LOCAL_PRODUCTION: value })).toThrow(
+        "- DATABASE_CA_CERT:",
+      );
+    });
+
+    it("is ignored on Vercel", () => {
+      for (const vercel of [{ VERCEL: "1" }, { VERCEL_ENV: "preview" }]) {
+        expect(() => run({ DATABASE_URL: local, ALLOW_LOCAL_PRODUCTION: "1", ...vercel })).toThrow(
+          "- DATABASE_CA_CERT:",
+        );
+      }
+    });
+
+    it("is required for a local database too", () => {
+      expect(() => run({ DATABASE_URL: local })).toThrow("- DATABASE_CA_CERT:");
+    });
+  });
+
+  it.each([
+    ["not a certificate", "must be a PEM certificate"],
+    ["-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE-----", "contains a certificate that cannot be parsed"],
+    ["-----BEGIN PUBLIC KEY-----\nAAAA\n-----END PUBLIC KEY-----", "must contain only CERTIFICATE blocks"],
+    [Buffer.from("hello").toString("base64"), "must be a PEM certificate"],
+  ])("rejects %j in every mode", (value, expected) => {
+    for (const mode of ["build", "runtime", "lenient"] as const) {
+      expect(() => parse(value, mode)).toThrow(`- DATABASE_CA_CERT: ${expected}`);
+    }
+  });
+
+  it("refuses a private key without echoing it", () => {
+    const withKey = `${CA}${tls.localhost.key}`;
+    const message = messageOf(() => parse(withKey));
+    expect(message).toContain("- DATABASE_CA_CERT: must not contain a private key");
+    expect(message).not.toContain(tls.localhost.key.split("\n")[1]);
+    expect(message).not.toContain(CA.split("\n")[1]);
+  });
 });
 
 describe("secret redaction", () => {

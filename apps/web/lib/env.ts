@@ -1,4 +1,6 @@
+import { X509Certificate } from "node:crypto";
 import { z } from "zod";
+import { databaseHost, isLocalDatabaseHost, tlsQueryParams } from "@/lib/db/connection-url";
 
 // Server-only: this reads `process.env` and the parsed result includes DATABASE_URL (a secret).
 // Never import it from a client component.
@@ -10,6 +12,11 @@ export type Env = {
   BASE_URL: string;
   /** Postgres connection string. Only guaranteed to be present in `runtime` mode. */
   DATABASE_URL: string | undefined;
+  /**
+   * PEM CA certificate(s) the database server certificate must chain to, normalized to plain PEM.
+   * Set: connect over TLS and verify the certificate and host name. Unset: connect without TLS.
+   */
+  DATABASE_CA_CERT: string | undefined;
   /** IANA time zone used for daily click counts. */
   APP_TIME_ZONE: string;
   /** Google Safe Browsing API key (secret). Only guaranteed to be present in `runtime` mode. */
@@ -88,8 +95,80 @@ const baseUrlValue = z.string().transform((raw, ctx) => {
 
 const databaseUrlValue = z
   .string()
-  // Deliberately not parsed with `new URL()`: a parse error message could echo the secret.
-  .regex(/^postgres(ql)?:\/\//, { error: "must start with postgres:// or postgresql://" });
+  // Shape only, via a regex: a parser's error message could echo the secret.
+  .regex(/^postgres(ql)?:\/\//, { error: "must start with postgres:// or postgresql://" })
+  .superRefine((value, ctx) => {
+    // Only parameter names reach the message, never their values or the rest of the URL.
+    const params = tlsQueryParams(value);
+    if (params.length > 0) {
+      ctx.addIssue({
+        code: "custom",
+        message: `must not set TLS options in the query string (found: ${[...new Set(params)].join(", ")}); TLS is configured by DATABASE_CA_CERT`,
+      });
+    }
+  });
+
+const PEM_BLOCK = /-----BEGIN ([A-Z0-9 ]+)-----[\s\S]*?-----END \1-----/g;
+
+/**
+ * Accepts PEM text (real newlines, or literal "\n" for single-line settings) or the PEM base64
+ * encoded as a whole. Returns the certificates as plain PEM. Messages never include the value.
+ */
+const caCertValue = z.string().transform((raw, ctx) => {
+  let pem = raw.trim();
+  if (!pem.includes("-----BEGIN")) {
+    const compact = pem.replace(/\s+/g, "");
+    pem = /^[A-Za-z0-9+/]+={0,2}$/.test(compact)
+      ? Buffer.from(compact, "base64").toString("utf8")
+      : "";
+  }
+  pem = pem.replace(/\\r\\n|\\n/g, "\n").replace(/\r\n/g, "\n");
+  if (/PRIVATE KEY-----/.test(pem)) {
+    ctx.addIssue({ code: "custom", message: "must not contain a private key" });
+    return z.NEVER;
+  }
+  const blocks = [...pem.matchAll(PEM_BLOCK)];
+  if (blocks.length === 0) {
+    ctx.addIssue({
+      code: "custom",
+      message: "must be a PEM certificate (-----BEGIN CERTIFICATE-----) or its base64 encoding",
+    });
+    return z.NEVER;
+  }
+  if (blocks.some((block) => block[1] !== "CERTIFICATE")) {
+    ctx.addIssue({ code: "custom", message: "must contain only CERTIFICATE blocks" });
+    return z.NEVER;
+  }
+  for (const [block] of blocks) {
+    try {
+      new X509Certificate(block);
+    } catch {
+      ctx.addIssue({ code: "custom", message: "contains a certificate that cannot be parsed" });
+      return z.NEVER;
+    }
+  }
+  return blocks.map(([block]) => block).join("\n") + "\n";
+});
+
+/**
+ * Opt-in for a production process on this machine against a local database (`next build &&
+ * next start` with the Docker Postgres), which then may run without DATABASE_CA_CERT. Only the
+ * exact value "1" counts, and never when Vercel's system variables are present.
+ */
+const ALLOW_LOCAL_PRODUCTION = "ALLOW_LOCAL_PRODUCTION";
+
+function isOnVercel(source: EnvSource): boolean {
+  return Boolean(source.VERCEL || source.VERCEL_ENV);
+}
+
+/** True when production may connect without TLS: opted in, off Vercel, and the database is local. */
+function allowsPlaintextDatabase(source: EnvSource): boolean {
+  if (source[ALLOW_LOCAL_PRODUCTION] !== "1" || isOnVercel(source)) return false;
+  const raw = emptyAsUnset(source.DATABASE_URL);
+  if (typeof raw !== "string") return false;
+  const host = databaseHost(raw);
+  return host !== undefined && isLocalDatabaseHost(host);
+}
 
 const timeZoneValue = z.string().refine(
   (value) => {
@@ -128,7 +207,7 @@ const positiveIntValue = z
       .max(INT4_MAX - 1, { error: "is too large" }),
   );
 
-function buildSchema(mode: EnvMode) {
+function buildSchema(mode: EnvMode, { caOptional }: { caOptional: boolean }) {
   const baseUrl =
     mode === "runtime" ? requiredWhen(mode, "BASE_URL").pipe(baseUrlValue) : baseUrlValue;
   const databaseUrl =
@@ -142,6 +221,19 @@ function buildSchema(mode: EnvMode) {
     DATABASE_URL: z.preprocess(
       emptyAsUnset,
       mode === "runtime" ? databaseUrl : databaseUrl.optional(),
+    ),
+    DATABASE_CA_CERT: z.preprocess(
+      emptyAsUnset,
+      mode === "runtime" && !caOptional
+        ? z
+            .string({
+              error: (issue) =>
+                issue.input === undefined
+                  ? `is required in production unless DATABASE_URL is local and ${ALLOW_LOCAL_PRODUCTION}=1 (DATABASE_CA_CERT is not set)`
+                  : "must be a string",
+            })
+            .pipe(caCertValue)
+        : caCertValue.optional(),
     ),
     APP_TIME_ZONE: z.preprocess(emptyAsUnset, timeZoneValue.default(DEFAULT_TIME_ZONE)),
     SAFE_BROWSING_API_KEY: z.preprocess(
@@ -177,9 +269,10 @@ function buildSchema(mode: EnvMode) {
  * SAFE_BROWSING_API_KEY and RATE_LIMIT_SECRET are secrets.
  */
 export function parseEnv(source: EnvSource, mode: EnvMode): Env {
-  const result = buildSchema(mode).safeParse({
+  const result = buildSchema(mode, { caOptional: allowsPlaintextDatabase(source) }).safeParse({
     BASE_URL: source.BASE_URL,
     DATABASE_URL: source.DATABASE_URL,
+    DATABASE_CA_CERT: source.DATABASE_CA_CERT,
     APP_TIME_ZONE: source.APP_TIME_ZONE,
     SAFE_BROWSING_API_KEY: source.SAFE_BROWSING_API_KEY,
     RATE_LIMIT_SECRET: source.RATE_LIMIT_SECRET,

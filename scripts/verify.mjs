@@ -38,7 +38,7 @@ const stages = [
   {
     name: "build",
     args: ["build", "--force"],
-    env: { DATABASE_URL: "", BASE_URL: "", APP_TIME_ZONE: "" },
+    env: { DATABASE_URL: "", DATABASE_CA_CERT: "", BASE_URL: "", APP_TIME_ZONE: "" },
   },
   { name: "test", args: ["test"] },
 ];

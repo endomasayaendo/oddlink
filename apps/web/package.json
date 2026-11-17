@@ -22,6 +22,7 @@
   "dependencies": {
     "@oddlink/ui": "workspace:*",
     "@oddlink/utils": "workspace:*",
+    "@vercel/functions": "^3.11.3",
     "drizzle-orm": "^0.45.4",
     "next": "16.4.6",
     "pg": "^8.23.1",

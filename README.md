@@ -226,6 +226,8 @@ pnpm --filter web link:disable <code>
 unset DATABASE_URL
 ```
 
+These commands use the app's connection code, so for a TLS database also export `DATABASE_CA_CERT` (for example `export DATABASE_CA_CERT="$(cat ca.pem)"`); without it they connect without TLS, and a URL with `sslmode` is rejected.
+
 `DATABASE_URL=postgres://… pnpm --filter web link:disable <code>` also works, but leaves the credentials in your shell history unless your shell skips commands that start with a space (zsh `setopt HIST_IGNORE_SPACE`, bash `HISTCONTROL=ignorespace`) and you prefix one. Never put production credentials in `apps/web/.env` of a working copy.
 
 ---
@@ -236,7 +238,9 @@ Set in `apps/web/.env`, or in the shell (`turbo.json` passes these through to th
 
 | Variable | Default | Required | Description |
 |----------|---------|----------|-------------|
-| `DATABASE_URL` | — | In production | Postgres connection string (`postgres://` or `postgresql://`) |
+| `DATABASE_URL` | — | In production | Postgres connection string (`postgres://` or `postgresql://`). TLS query parameters (`sslmode`, `ssl`, `sslrootcert`, …) are rejected: TLS is set by `DATABASE_CA_CERT` |
+| `DATABASE_CA_CERT` | — | In production | CA certificate the database server must chain to, as PEM text (newlines, or literal `\n` on one line) or that PEM base64-encoded. When set, the app connects over TLS and verifies the certificate and host name; when unset, it connects without TLS (see [Database connection](#database-connection)) |
+| `ALLOW_LOCAL_PRODUCTION` | — | No | `1` lets a production process run without `DATABASE_CA_CERT` when `DATABASE_URL` points to this machine (a local `pnpm build && pnpm start`). Ignored on Vercel |
 | `BASE_URL` | `http://localhost:3000` | In production | Absolute `http`/`https` URL used in generated short links; no credentials, query or fragment; trailing slashes are removed |
 | `SAFE_BROWSING_API_KEY` | — | In production | Google Safe Browsing API key used to refuse phishing/malware URLs when issuing. Without it (dev, tests) the check is skipped with one warning |
 | `RATE_LIMIT_SECRET` | dev-only value | In production | Secret (32+ characters, e.g. `openssl rand -hex 32`) used to HMAC client addresses for rate limiting |
@@ -246,4 +250,24 @@ Set in `apps/web/.env`, or in the shell (`turbo.json` passes these through to th
 | `TEST_DATABASE_URL` | — | For `pnpm test` | Database used by the tests (not read by the app) |
 | `DB_NAME` / `DB_USERNAME` / `DB_PASSWORD` | `oddlink` / `postgres` / `postgres` | No | Used by `apps/web/docker-compose.yml` |
 
-The app validates these at startup (`apps/web/lib/env.ts`). In production (`next start`), a missing `BASE_URL`, `DATABASE_URL`, `SAFE_BROWSING_API_KEY`, `RATE_LIMIT_SECRET`, `ISSUE_RATE_LIMIT_MAX` or `ISSUE_RATE_LIMIT_WINDOW_SECONDS`, or any malformed value, prints every problem and exits. In development and tests, missing values fall back to the defaults. `next build` needs none of them.
+The app validates these at startup (`apps/web/lib/env.ts`). In production (`next start`), a missing `BASE_URL`, `DATABASE_URL`, `DATABASE_CA_CERT`, `SAFE_BROWSING_API_KEY`, `RATE_LIMIT_SECRET`, `ISSUE_RATE_LIMIT_MAX` or `ISSUE_RATE_LIMIT_WINDOW_SECONDS`, or any malformed value, prints every problem and exits. In development and tests, missing values fall back to the defaults. `next build` needs none of them.
+
+### Database connection
+
+The pool (`apps/web/lib/db/index.ts`) is sized for serverless functions, where every instance holds its own pool: at most 5 connections, idle ones closed after 5 seconds, and `attachDatabasePool` from `@vercel/functions` keeps a Vercel function alive until released connections pass that idle timeout, so they are closed rather than left open while the instance is suspended. Off Vercel it does not wait for anything.
+
+**TLS.** With `DATABASE_CA_CERT` set, the connection uses TLS with `rejectUnauthorized: true` and Node's host-name check, the equivalent of libpq `sslmode=verify-full`; verification is never turned off. Without it, the connection is plain TCP, which is what the local Docker Postgres expects. Production refuses to start without `DATABASE_CA_CERT` unless `DATABASE_URL` points to this machine and `ALLOW_LOCAL_PRODUCTION=1` is set (never on Vercel).
+
+`DATABASE_URL` must not carry TLS query parameters. node-postgres parses the connection string and lets it override the `ssl` option, so `?sslmode=require` would drop the CA, `?sslmode=disable` would turn TLS off and `?sslmode=no-verify` would turn verification off; rejecting them keeps `DATABASE_CA_CERT` the only switch. `PGSSLMODE` in the environment is ignored for the same reason.
+
+For Supabase, download the CA from the project's Database Settings (SSL Configuration) and set it on Vercel for Production and Preview. A multi-line value can be pasted as is; if a setting only takes one line, use `base64 < prod-ca-2021.crt | tr -d '\n'` (the filename is whatever the dashboard gives you). Consider turning on Supabase's SSL enforcement too, so the server refuses plaintext clients as well.
+
+`pnpm db:migrate` (drizzle-kit) and its own `DATABASE_URL` do not read `DATABASE_CA_CERT`. To migrate a TLS database, give that one command a URL with `?sslmode=verify-full&sslrootcert=/path/to/ca.pem`.
+
+**Statement timeout.** The pool sends `statement_timeout=5000` as a startup parameter. That works on a direct connection and on Supavisor in session mode (port 5432), but Supabase documents that session-level settings cannot be used through Supavisor in transaction mode (port 6543), which is the URL to use on Vercel. Whether Supavisor applies the startup parameter there is Unverified, so set the timeout on the database role as well, once, from the SQL editor:
+
+```sql
+ALTER ROLE <app_role> SET statement_timeout = '5s';
+```
+
+`<app_role>` is the Postgres role the app connects as (with the shared pooler, the user `postgres.<project-ref>` is the role `postgres`). Postgres applies a role setting when a server session starts, so it does not depend on the pooler; server connections the pooler already holds keep the old value until they are replaced. The setting affects every session of that role, including `pnpm db:migrate` and the dashboard's SQL editor when they use the same role, so a dedicated role for the app is preferable to changing `postgres`. Check it with `SELECT rolname, rolconfig FROM pg_roles WHERE rolname = '<app_role>';` (`SHOW statement_timeout` in an existing session does not reflect it).
