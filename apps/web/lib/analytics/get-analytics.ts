@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { accessLog, urlMappings } from "@/lib/db/schema";
 import { APP_TIME_ZONE, shortUrlFor } from "@/lib/constants";
 import { type LinkActor, linkState, toLinkStatus } from "@/lib/links/link-state";
+import { toRedirectUrl } from "@/lib/links/resolve-link";
 
 export type DailyAccess = { date: string; count: number };
 
@@ -15,10 +16,17 @@ type AnalyticsStats = {
   dailyAccess: DailyAccess[];
 };
 
+/**
+ * `originalUrl` is the stored destination as text. `originalHref` is the URL a redirect would use
+ * (`toRedirectUrl`), or null when the redirect would refuse the stored value or there is no
+ * destination to show; only `originalHref` may be rendered as a link.
+ */
+type Destination<Url extends string | null> = { originalUrl: Url; originalHref: string | null };
+
 export type Analytics =
-  | ({ state: "active" | "expired"; originalUrl: string } & AnalyticsStats)
+  | ({ state: "active" | "expired" } & Destination<string> & AnalyticsStats)
   // The analytics page is public, so the destination is kept only when the owner disabled the link.
-  | ({ state: "disabled"; disabledBy: LinkActor; originalUrl: string | null } & AnalyticsStats)
+  | ({ state: "disabled"; disabledBy: LinkActor } & Destination<string | null> & AnalyticsStats)
   // A tombstone has no data left to show.
   | { state: "deleted"; shortCode: string };
 
@@ -67,9 +75,14 @@ export async function getAnalytics(shortCode: string): Promise<Analytics | null>
   };
   if (status.state === "disabled") {
     const originalUrl = status.by === "owner" ? mapping.originalUrl : null;
-    return { state: "disabled", disabledBy: status.by, originalUrl, ...stats };
+    return { state: "disabled", disabledBy: status.by, ...destination(originalUrl), ...stats };
   }
   // Not deleted, so the url_unless_deleted CHECK guarantees a URL.
   if (mapping.originalUrl === null) throw new Error(`Link ${mapping.shortCode} has no URL but is not deleted`);
-  return { state: status.state, originalUrl: mapping.originalUrl, ...stats };
+  return { state: status.state, ...destination(mapping.originalUrl), ...stats };
+}
+
+function destination<Url extends string | null>(originalUrl: Url): Destination<Url> {
+  const originalHref = originalUrl === null ? null : (toRedirectUrl(originalUrl)?.href ?? null);
+  return { originalUrl, originalHref };
 }
