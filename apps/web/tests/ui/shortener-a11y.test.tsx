@@ -2,6 +2,7 @@
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { IssueState } from "@/lib/actions/issue-link";
+import { SAFE_BROWSING_NOTICE } from "@/lib/links/safe-browsing/advisory";
 import { ResultCard } from "@/ui/links/result-card";
 import { Shortener } from "@/ui/links/shortener";
 import { UrlForm } from "@/ui/links/url-form";
@@ -70,6 +71,47 @@ describe("Shortener", () => {
     expect(screen.getByRole("status")).toBe(status);
     expect(within(status).queryByText("Shortening...")).toBeNull();
     expect(within(status).getByRole("link", { name: SHORT_URL })).toBeTruthy();
+  });
+
+  it("shows a failed submit right under the form, above the Safe Browsing notice, and describes the input with it", async () => {
+    issueAction.mockResolvedValue({ ok: false, message: "Invalid URL." });
+
+    render(<Shortener />);
+    const input = screen.getByLabelText("URL to shorten");
+    expect(input.hasAttribute("aria-describedby")).toBe(false);
+
+    fireEvent.change(input, { target: { value: "https://example.com@evil.example/" } });
+    await act(async () => {
+      screen.getByRole<HTMLFormElement>("button", { name: "Shorten" }).form!.requestSubmit();
+    });
+
+    const alert = screen.getByRole("alert");
+    const form = input.closest("form")!;
+    const notice = screen.getByText(SAFE_BROWSING_NOTICE);
+    expect(form.compareDocumentPosition(alert) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(alert.compareDocumentPosition(notice) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    // The description is the message alone, not the dismiss button's name.
+    const description = document.getElementById(screen.getByLabelText("URL to shorten").getAttribute("aria-describedby")!);
+    expect(description?.textContent).toBe("Invalid URL.");
+
+    await act(async () => fireEvent.click(within(alert).getByRole("button", { name: "Close" })));
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getByLabelText("URL to shorten").hasAttribute("aria-describedby")).toBe(false);
+  });
+
+  it("shows the result card above the Safe Browsing notice", async () => {
+    issueAction.mockResolvedValue({ ok: true, shortCode: "abc", shortUrl: SHORT_URL, originalUrl: "https://example.com/" });
+
+    render(<Shortener />);
+    fireEvent.change(screen.getByLabelText("URL to shorten"), { target: { value: "https://example.com/" } });
+    await act(async () => {
+      screen.getByRole<HTMLFormElement>("button", { name: "Shorten" }).form!.requestSubmit();
+    });
+
+    const card = within(screen.getByRole("status")).getByRole("link", { name: SHORT_URL });
+    const notice = screen.getByText(SAFE_BROWSING_NOTICE);
+    expect(card.compareDocumentPosition(notice) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });
 

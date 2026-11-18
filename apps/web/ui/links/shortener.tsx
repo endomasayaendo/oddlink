@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useId, useState } from "react";
 import { issueAction } from "@/lib/actions/issue-link";
 import { useHistory } from "@/ui/links/use-history";
 import { ErrorMessage } from "@oddlink/ui";
@@ -8,6 +8,7 @@ import {
   ADVISORY_TEXT,
   ADVISORY_URL,
   MALWARE_INFO_URL,
+  SAFE_BROWSING_NOTICE,
   SOCIAL_ENGINEERING_INFO_URL,
 } from "@/lib/links/safe-browsing/advisory";
 import { FlipOverlay } from "./flip-overlay";
@@ -20,6 +21,7 @@ export function Shortener() {
   const { history, addEntry, removeEntry } = useHistory();
   const [copyError, setCopyError] = useState("");
   const [dismissed, setDismissed] = useState<FormState>(null);
+  const errorId = useId();
 
   const [state, formAction, pending] = useActionState(async (_prev: FormState, formData: FormData): Promise<FormState> => {
     setCopyError("");
@@ -30,36 +32,53 @@ export function Shortener() {
     return next;
   }, null);
 
-  const error = copyError || (state && !state.ok && state !== dismissed ? state.message : "");
-  const showAdvisory = !copyError && !!state && !state.ok && state !== dismissed && state.reason === "unsafe_url";
+  const submitError = state && !state.ok && state !== dismissed ? state.message : "";
+  const error = copyError || submitError;
+  const showAdvisory = !copyError && !!submitError && state?.ok === false && state.reason === "unsafe_url";
 
   return (
     <>
-      <UrlForm action={formAction} pending={pending} defaultValue={state && !state.ok ? state.submitted : ""} />
+      {/* The error and the result sit right under the form and above the notice, so on a narrow
+          screen they appear next to the input instead of below the fold. */}
+      <div className="mb-6">
+        <UrlForm
+          action={formAction}
+          pending={pending}
+          defaultValue={state && !state.ok ? state.submitted : ""}
+          errorId={submitError && !copyError ? errorId : undefined}
+        />
 
-      {error && (
-        <ErrorMessage
-          message={error}
-          onDismiss={() => {
-            setCopyError("");
-            setDismissed(state);
-          }}
-        >
-          {showAdvisory && <UnsafeUrlAdvisory />}
-        </ErrorMessage>
-      )}
+        {error && (
+          <ErrorMessage
+            message={error}
+            messageId={errorId}
+            className="mt-3"
+            onDismiss={() => {
+              setCopyError("");
+              setDismissed(state);
+            }}
+          >
+            {showAdvisory && <UnsafeUrlAdvisory />}
+          </ErrorMessage>
+        )}
+
+        {/* Rendered from the start so screen readers are already watching it when progress or a result
+            appears; removals (a failed retry clearing the card) are not announced, the alert covers those. */}
+        <div role="status" className="flex justify-center">
+          {pending && <span className="sr-only">Shortening...</span>}
+          {state?.ok && (
+            <div className="mt-6 mb-4">
+              <ResultCard key={state.shortCode} shortCode={state.shortCode} shortUrl={state.shortUrl} onError={setCopyError} />
+            </div>
+          )}
+        </div>
+
+        {/* Disclaimer Google's Safe Browsing terms ask for on sites that use the API. */}
+        <p className="mt-2 text-[0.75rem] leading-snug text-ink-muted">{SAFE_BROWSING_NOTICE}</p>
+      </div>
 
       {/* Keyed by code: the page turns over once per issued link, never on failures or history edits. */}
       {state?.ok && <FlipOverlay key={state.shortCode} />}
-
-      {/* Rendered from the start so screen readers are already watching it when progress or a result
-          appears; removals (a failed retry clearing the card) are not announced, the alert covers those. */}
-      <div role="status" className="flex justify-center">
-        {pending && <span className="sr-only">Shortening...</span>}
-        {state?.ok && (
-          <ResultCard key={state.shortCode} shortCode={state.shortCode} shortUrl={state.shortUrl} onError={setCopyError} />
-        )}
-      </div>
 
       <HistoryList history={history} onRemove={removeEntry} />
     </>

@@ -10,6 +10,8 @@ type Props = {
    * passing a value replaces that default rather than adding to it.
    */
   className?: string;
+  /** Id for the message text (without the dismiss button), so a control can point at it with aria-describedby. */
+  messageId?: string;
 };
 
 const FOCUSABLE =
@@ -20,7 +22,7 @@ const FOCUSABLE =
  * (usually the control whose action failed), or else to the nearest focusable element before it, so
  * keyboard and screen reader users don't land on the page body.
  */
-export function ErrorMessage({ message, children, onDismiss, className = "mb-6" }: Props) {
+export function ErrorMessage({ message, children, onDismiss, className = "mb-6", messageId }: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
   const originRef = useRef<Element | null>(null);
 
@@ -44,7 +46,7 @@ export function ErrorMessage({ message, children, onDismiss, className = "mb-6" 
       role="alert"
       className={`flex animate-fade-in-down items-center gap-3 rounded-wobble border-2 border-rust bg-rust-wash px-4 py-3.5 ${className}`}
     >
-      <div className="flex-1 text-left text-[0.9rem] text-rust">
+      <div id={messageId} className="flex-1 text-left text-[0.9rem] text-rust">
         <span>{message}</span>
         {children}
       </div>
