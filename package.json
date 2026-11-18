@@ -23,7 +23,7 @@
     "db:studio": "pnpm --filter web db:studio"
   },
   "devDependencies": {
-    "eslint": "^9.39.5",
+    "eslint": "^10.15.0",
     "eslint-config-next": "16.4.6",
     "turbo": "^2.11.11",
     "typescript": "^5.9.3"
