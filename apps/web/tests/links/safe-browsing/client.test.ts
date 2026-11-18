@@ -13,9 +13,12 @@ const protoResponse = (body: Uint8Array) =>
   new Response(new Uint8Array(body), { status: 200, headers: { "content-type": "application/x-protobuf" } });
 const cacheFor = (cacheSeconds: number) => protoResponse(encodeResponse({ cacheSeconds }));
 const emptyResponse = () => protoResponse(new Uint8Array());
-// Google's error bodies are JSON even when the success body is protobuf.
+// Google sends a protobuf google.rpc.Status with the error; the client never reads it, so any bytes do.
 const errorResponse = (status: number) =>
-  new Response(JSON.stringify({ error: { code: status } }), { status, headers: { "content-type": "application/json" } });
+  new Response(new TextEncoder().encode(`status ${status}`), {
+    status,
+    headers: { "content-type": "application/x-protobuf" },
+  });
 const matchResponse = (fullHashes: FullHashSpec[], cacheSeconds = 300) =>
   protoResponse(encodeResponse({ fullHashes, cacheSeconds }));
 const flagged = (threatType: number = ThreatType.SOCIAL_ENGINEERING, attributes?: number[]): FullHashSpec => ({
@@ -25,6 +28,7 @@ const flagged = (threatType: number = ThreatType.SOCIAL_ENGINEERING, attributes?
 
 let clock = 0;
 let warn: ReturnType<typeof vi.spyOn>;
+let error: ReturnType<typeof vi.spyOn>;
 
 function setup(respond: (url: URL, init: RequestInit) => Response | Promise<Response>, options = {}) {
   const fetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => respond(new URL(String(input)), init!));
@@ -41,9 +45,11 @@ function setup(respond: (url: URL, init: RequestInit) => Response | Promise<Resp
 beforeEach(() => {
   clock = 1_000_000;
   warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  error = vi.spyOn(console, "error").mockImplementation(() => {});
 });
 afterEach(() => {
   warn.mockRestore();
+  error.mockRestore();
   vi.useRealTimers();
 });
 
@@ -171,10 +177,11 @@ describe("request", () => {
 });
 
 describe("failures are unknown (fail open)", () => {
-  it.each([400, 403, 429, 500, 503])("HTTP %i", async (status) => {
+  it.each([500, 502, 503, 504])("HTTP %i is a warning", async (status) => {
     const { client } = setup(() => errorResponse(status));
     expect(await client.check(URL_TO_CHECK)).toBe("unknown");
-    expect(warn).toHaveBeenCalledWith("safe_browsing outcome=error", expect.objectContaining({ status }));
+    expect(warn).toHaveBeenCalledWith("safe_browsing outcome=error", { status, durationMs: 0 });
+    expect(error).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -220,6 +227,73 @@ describe("failures are unknown (fail open)", () => {
     const { client, fetch } = setup(() => (fail ? errorResponse(500) : cacheFor(300)));
     expect(await client.check(URL_TO_CHECK)).toBe("unknown");
     fail = false;
+    expect(await client.check(URL_TO_CHECK)).toBe("safe");
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("configuration errors", () => {
+  it.each([
+    [400, "invalid_key_or_request"],
+    [401, "access_denied"],
+    [403, "access_denied"],
+    [429, "quota_exceeded"],
+  ])("HTTP %i is an error with cause=%s, still unknown", async (status, cause) => {
+    const { client } = setup(() => errorResponse(status));
+    expect(await client.check(URL_TO_CHECK)).toBe("unknown");
+    expect(error).toHaveBeenCalledTimes(1);
+    expect(error).toHaveBeenCalledWith(`safe_browsing outcome=config_error cause=${cause}`, { status, durationMs: 0 });
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("logs neither the key nor the URL being checked", async () => {
+    for (const status of [400, 401, 403, 429]) {
+      const { client } = setup(() => errorResponse(status));
+      await client.check(URL_TO_CHECK);
+    }
+    const logged = JSON.stringify([...error.mock.calls, ...warn.mock.calls]);
+    expect(error).toHaveBeenCalledTimes(4);
+    for (const piece of [API_KEY, "phish.example.com", "login", "secret-token", "alice"]) {
+      expect(logged).not.toContain(piece);
+    }
+  });
+
+  it("logs each cause at most once a minute and downgrades repeats to warnings", async () => {
+    let status = 403;
+    const { client } = setup(() => errorResponse(status));
+    expect(await client.check(URL_TO_CHECK)).toBe("unknown");
+    clock += 59_999;
+    expect(await client.check(URL_TO_CHECK)).toBe("unknown");
+    expect(error).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith("safe_browsing outcome=error", { status: 403, durationMs: 0 });
+
+    // 401 shares the cause with 403; 429 is a different one and is not held back.
+    status = 401;
+    await client.check(URL_TO_CHECK);
+    expect(error).toHaveBeenCalledTimes(1);
+    status = 429;
+    await client.check(URL_TO_CHECK);
+    expect(error).toHaveBeenCalledTimes(2);
+    expect(error).toHaveBeenLastCalledWith("safe_browsing outcome=config_error cause=quota_exceeded", {
+      status: 429,
+      durationMs: 0,
+    });
+
+    status = 403;
+    clock += 1;
+    await client.check(URL_TO_CHECK);
+    expect(error).toHaveBeenCalledTimes(3);
+    expect(error).toHaveBeenLastCalledWith("safe_browsing outcome=config_error cause=access_denied", {
+      status: 403,
+      durationMs: 0,
+    });
+  });
+
+  it("does not cache the failure: the next lookup after a fix succeeds", async () => {
+    let status = 400;
+    const { client, fetch } = setup(() => (status === 200 ? cacheFor(300) : errorResponse(status)));
+    expect(await client.check(URL_TO_CHECK)).toBe("unknown");
+    status = 200;
     expect(await client.check(URL_TO_CHECK)).toBe("safe");
     expect(fetch).toHaveBeenCalledTimes(2);
   });
