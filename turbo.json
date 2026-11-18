@@ -15,6 +15,7 @@
     "lint": {
       "dependsOn": ["^lint"]
     },
+    "//#lint:scripts": {},
     "typecheck": {
       "dependsOn": ["^typecheck"]
     },

@@ -1,6 +1,6 @@
 // `pnpm verify`: the same checks CI runs (.github/workflows/ci.yml), in the same order.
 // It needs Postgres for the tests but never starts anything itself; use `pnpm bootstrap` for that.
-import { canConnect, die, info, ok, pnpm, readWebEnv, step } from "./lib.mjs";
+import { canConnect, capture, die, info, ok, pnpm, readWebEnv, step } from "./lib.mjs";
 
 if (process.argv.length > 2) {
   die(`Unknown argument: ${process.argv.slice(2).join(" ")}`, "Usage: pnpm verify");
@@ -28,6 +28,11 @@ if (!(await canConnect(host, port))) {
   die(`Postgres is not reachable at ${host}:${port}.`, NO_DB_HINT);
 }
 
+// `drizzle-kit generate` writes a new migration when schema.ts has changes no migration covers.
+// Comparing git status before and after (rather than requiring a clean tree) still lets a migration
+// that was generated but not yet committed pass.
+const drizzleStatus = () => capture("git", ["status", "--porcelain", "apps/web/drizzle"]).stdout;
+
 // CI builds with no DATABASE_URL on purpose, so a build-time DB read fails loudly. Locally the
 // variables may come from the shell or apps/web/.env; Next.js does not override a variable that is
 // already defined (even as ""), and apps/web/lib/env.ts treats "" as unset. `--force` stops turbo
@@ -35,6 +40,13 @@ if (!(await canConnect(host, port))) {
 const stages = [
   { name: "lint", args: ["lint"] },
   { name: "typecheck", args: ["typecheck"] },
+  {
+    name: "schema",
+    args: ["--filter", "web", "exec", "drizzle-kit", "generate"],
+    before: drizzleStatus,
+    after: (before) =>
+      drizzleStatus() === before ? null : "schema.ts has changes with no migration; review and commit the files it generated.",
+  },
   {
     name: "build",
     args: ["build", "--force"],
@@ -47,11 +59,14 @@ const timings = [];
 for (const stage of stages) {
   step(`${stage.name}: pnpm ${stage.args.join(" ")}`);
   const started = Date.now();
+  const snapshot = stage.before?.();
   const { code, signal } = await pnpm(stage.args, { env: stage.env });
   const seconds = ((Date.now() - started) / 1000).toFixed(1);
   if (code !== 0) {
     die(`verify failed at stage "${stage.name}" (${signal ?? `exit code ${code}`}, after ${seconds}s).`);
   }
+  const problem = stage.after?.(snapshot);
+  if (problem) die(`verify failed at stage "${stage.name}": ${problem}`);
   ok(`${stage.name} passed (${seconds}s)`);
   timings.push(`${stage.name} ${seconds}s`);
 }
