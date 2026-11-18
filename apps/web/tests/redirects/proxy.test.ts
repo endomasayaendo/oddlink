@@ -207,7 +207,9 @@ describe("proxy redirects", () => {
 
   it.each(["POST", "PUT", "DELETE", "PATCH"])("answers %s with 405 without counting a click", async (method) => {
     const link = await insertLink("go-code", "https://example.com", future());
-    expect((await request("/go-code", method).res).status).toBe(405);
+    const response = await request("/go-code", method).res;
+    expect(response.status).toBe(405);
+    expect(response.headers.get("allow")).toBe("GET, HEAD, OPTIONS");
     expect(await countOf("go-code")).toBe(0);
     expect(await logsOf(link.id)).toBe(0);
   });
@@ -380,7 +382,9 @@ describe("proxy preview", () => {
   it.each(["POST", "PUT", "DELETE", "PATCH"])("answers %s with 405 without a lookup", async (method) => {
     const execute = vi.spyOn(db, "execute");
     await insertLink("go-code", "https://example.com", future());
-    expect((await request("/go-code+", method).res).status).toBe(405);
+    const response = await request("/go-code+", method).res;
+    expect(response.status).toBe(405);
+    expect(response.headers.get("allow")).toBe("GET, HEAD, OPTIONS");
     expect(execute).not.toHaveBeenCalled();
     expect(await countOf("go-code")).toBe(0);
   });

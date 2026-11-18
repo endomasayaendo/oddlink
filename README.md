@@ -96,6 +96,8 @@ If the port is taken, or `pnpm db:up` complains that the name `oddlink-db` is in
 | `GET /{shortCode}+` | Preview page (rewritten to `/preview/{shortCode}`): shows the destination host and full address, created / expires dates and total clicks, and a "Continue" button that goes through the short link itself. Viewing it never counts as a click. Unknown, unusable or malformed codes get a real `404`; disabled or deleted links get `410 Gone`; expired links get a page with an "Expired" banner and no button. `no-store`, `noindex`. A transparency feature for the person holding the link, not an abuse filter |
 | `/analytics/{shortCode}` | Total clicks, created / expires dates, and daily clicks. `proxy.ts` checks the code first so unknown codes get a real `404` and disabled or deleted ones `410 Gone` |
 
+Short links (`/{shortCode}` and `/{shortCode}+`) answer only `GET`, `HEAD` and `OPTIONS`; any other method gets `405` with `Allow: GET, HEAD, OPTIONS`, and is never counted as a click.
+
 ### `POST /api/issue`
 
 ```bash
@@ -114,6 +116,8 @@ curl -X POST http://localhost:3000/api/issue \
 The request must be sent with `Content-Type: application/json` (a `charset` parameter is fine); anything else gets `415` before the body is read or the request counts toward the rate limit.
 
 Errors return `{"message": "..."}`: `400` for a blank or invalid URL (only `http`/`https` are accepted), `422` if Google Safe Browsing flags the URL (the body also carries `"advisory": "Advisory provided by Google"` and `"advisoryUrl"`), `429` with a `Retry-After` header (seconds) when the client has issued too many links recently (see [Rate limiting](#rate-limiting)), `503` if no unique phrase could be generated.
+
+Methods other than `POST` and `OPTIONS` get `405` with `Allow: OPTIONS, POST`.
 
 ### Safe Browsing check
 
