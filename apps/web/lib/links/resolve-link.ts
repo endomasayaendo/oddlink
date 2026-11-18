@@ -25,7 +25,7 @@ export async function resolveShortCode(shortCode: string): Promise<ResolvedLink 
 
 /**
  * Finds the same link `resolveShortCode` would redirect to, without counting the access or
- * writing a log row. For requests that are not clicks, such as HEAD.
+ * writing a log row. For requests that are not clicks: HEAD, browser prefetches and known bots.
  */
 export async function findActiveLink(shortCode: string): Promise<ResolvedLink | null> {
   const { rows } = await db.execute<{ id: string; original_url: string }>(sql`
