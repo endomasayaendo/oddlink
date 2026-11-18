@@ -1,7 +1,7 @@
 "use client";
 
-import { useActionState, useId, useState } from "react";
-import { issueAction } from "@/lib/actions/issue-link";
+import { useActionState, useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
+import { issueAction, issueFormAction } from "@/lib/actions/issue-link";
 import { useHistory } from "@/ui/links/use-history";
 import { ErrorMessage } from "@oddlink/ui";
 import {
@@ -23,14 +23,27 @@ export function Shortener() {
   const [dismissed, setDismissed] = useState<FormState>(null);
   const errorId = useId();
 
-  const [state, formAction, pending] = useActionState(async (_prev: FormState, formData: FormData): Promise<FormState> => {
+  const submitInBrowser = async (_prev: FormState, formData: FormData): Promise<FormState> => {
     setCopyError("");
     // React resets the form after every action, so a failed submit (including one where the action
     // call itself rejects) carries the input back in the state, fed back as the defaultValue.
-    const next = await submitIssue(issueAction, formData);
-    if (next?.ok) addEntry({ shortCode: next.shortCode, shortUrl: next.shortUrl, originalUrl: next.originalUrl });
-    return next;
-  }, null);
+    return submitIssue(issueAction, formData);
+  };
+
+  // Until hydration the hook gets the Server Action itself, so the server-rendered form posts to it:
+  // a submit before hydration (or without JavaScript) reloads the page with the action's result as
+  // the state. Once hydrated, the wrapper above handles submits and never throws.
+  const hydrated = useSyncExternalStore(noSubscribe, isHydrated, isNotHydrated);
+  const [state, formAction, pending] = useActionState(hydrated ? submitInBrowser : issueFormAction, null);
+
+  // Recorded from the state rather than inside the action, so a result rendered from a form post
+  // before hydration is saved too once the page hydrates.
+  const recorded = useRef<FormState>(null);
+  useEffect(() => {
+    if (!state?.ok || recorded.current === state) return;
+    recorded.current = state;
+    addEntry({ shortCode: state.shortCode, shortUrl: state.shortUrl, originalUrl: state.originalUrl });
+  }, [state, addEntry]);
 
   const submitError = state && !state.ok && state !== dismissed ? state.message : "";
   const error = copyError || submitError;
@@ -84,6 +97,10 @@ export function Shortener() {
     </>
   );
 }
+
+const noSubscribe = () => () => {};
+const isHydrated = () => true;
+const isNotHydrated = () => false;
 
 const linkClass = "underline underline-offset-2 hover:text-rust-deep";
 
