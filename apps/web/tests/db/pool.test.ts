@@ -1,6 +1,6 @@
 import type { Pool } from "pg";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createPool } from "@/lib/db";
+import { createPool, sharedPool } from "@/lib/db";
 
 const pools: Pool[] = [];
 
@@ -67,5 +67,24 @@ describe("createPool", () => {
     expect(spy).toHaveBeenCalled();
     const { rows } = await pool.query("SELECT 1 AS one");
     expect(rows[0].one).toBe(1);
+  });
+});
+
+describe("sharedPool", () => {
+  it("reuses one pool when the db module is evaluated again in the same process", async () => {
+    vi.resetModules();
+    const first = await import("@/lib/db");
+    vi.resetModules();
+    const second = await import("@/lib/db");
+
+    expect(second.db.$client).toBe(first.db.$client);
+    expect(second.sharedPool()).toBe(first.db.$client);
+    expect(first.db.$client.listenerCount("error")).toBe(1);
+  });
+
+  it("returns the existing pool without creating another", () => {
+    const create = vi.fn(createPool);
+    expect(sharedPool(create)).toBe(sharedPool(create));
+    expect(create).not.toHaveBeenCalled();
   });
 });
