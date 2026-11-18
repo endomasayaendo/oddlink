@@ -11,7 +11,8 @@
     "build": "turbo build",
     "dev": "turbo dev",
     "start": "pnpm --filter web start",
-    "lint": "turbo lint",
+    "lint": "turbo lint lint:scripts",
+    "lint:scripts": "eslint --max-warnings 0 scripts",
     "test": "turbo test",
     "test:scripts": "node --test \"scripts/*.test.mjs\"",
     "typecheck": "turbo typecheck",
@@ -22,7 +23,10 @@
     "db:studio": "pnpm --filter web db:studio"
   },
   "devDependencies": {
-    "turbo": "^2.11.11"
+    "eslint": "^10.15.0",
+    "eslint-config-next": "16.4.6",
+    "turbo": "^2.11.11",
+    "typescript": "^5.9.3"
   },
   "packageManager": "pnpm@12.15.0"
 }
