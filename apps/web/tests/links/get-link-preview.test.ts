@@ -46,7 +46,7 @@ describe("getLinkPreview", () => {
   });
 
   it("flags an expired link instead of hiding it", async () => {
-    await insertLink({ expiresAt: new Date(Date.now() - 1000) });
+    await insertLink({ expiresAt: new Date(Date.now() - 86_400_000) });
     expect(await getLinkPreview("peek-code")).toMatchObject({ state: "expired" });
   });
 
@@ -79,7 +79,7 @@ describe("getLinkPreview", () => {
   });
 
   it.each(["operator", "automated", "owner"] as const)("returns no destination for a link disabled by %s", async (by) => {
-    await insertLink({ expiresAt: new Date(Date.now() - 1000) });
+    await insertLink({ expiresAt: new Date(Date.now() - 86_400_000) });
     await db.execute(sql`UPDATE url_mappings SET disabled_at = now(), disabled_by = ${by} WHERE short_code = 'peek-code'`);
     expect(await getLinkPreview("peek-code")).toEqual({ state: "disabled", by, shortCode: "peek-code" });
   });

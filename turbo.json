@@ -21,7 +21,7 @@
     },
     "test": {
       "cache": false,
-      "passThroughEnv": ["TEST_DATABASE_URL"]
+      "passThroughEnv": ["TEST_DATABASE_URL", "TEST_CLOCK_START"]
     }
   }
 }

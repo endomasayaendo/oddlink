@@ -244,6 +244,7 @@ Set in `apps/web/.env`, or in the shell (`turbo.json` passes these through to th
 | `ISSUE_RATE_LIMIT_WINDOW_SECONDS` | dev-only value | In production | Rate-limit window length in seconds (positive integer) |
 | `APP_TIME_ZONE` | `Asia/Tokyo` | No | IANA time zone name (e.g. `Asia/Tokyo`, `UTC`) for daily click counts and dates; offsets like `+09:00` are rejected |
 | `TEST_DATABASE_URL` | — | For `pnpm test` | Database used by the tests (not read by the app). The tests truncate its tables, so they refuse to run unless the database name ends in `_test` or `_test_<suffix>` (e.g. `oddlink_test`, `oddlink_test_97`) |
+| `TEST_CLOCK_START` | — | No | Tests only: an ISO 8601 instant (e.g. `2028-02-29T14:59:59.99Z`) at which every test starts, on both the JS clock and the database `now()`, to check that tests pass just before a minute, day or leap-day boundary |
 | `DB_NAME` / `DB_USERNAME` / `DB_PASSWORD` | `oddlink` / `postgres` / `postgres` | No | Used by `apps/web/docker-compose.yml` |
 
 The app validates these at startup (`apps/web/lib/env.ts`). In production (`next start`), a missing `BASE_URL`, `DATABASE_URL`, `SAFE_BROWSING_API_KEY`, `RATE_LIMIT_SECRET`, `ISSUE_RATE_LIMIT_MAX` or `ISSUE_RATE_LIMIT_WINDOW_SECONDS`, or any malformed value, prints every problem and exits. In development and tests, missing values fall back to the defaults. `next build` needs none of them.

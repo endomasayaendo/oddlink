@@ -1,6 +1,7 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Client } from "pg";
+import { TEST_CLOCK_SETUP_SQL } from "./utils/test-clock";
 import { assertTestDatabaseName, testDatabaseNameFromUrl } from "./utils/test-database";
 
 // Vitest can fail to print an error thrown from global setup, so the message is also written here.
@@ -14,7 +15,8 @@ function reportRefusal<T>(check: () => T): T {
   }
 }
 
-// Refuses a non-test database, creates the test database if needed and applies migrations once per run.
+// Refuses a non-test database, creates the test database if needed, applies migrations and resets
+// the test clock once per run.
 export default async function setup() {
   const connectionString = process.env.TEST_DATABASE_URL;
   const dbName = reportRefusal(() => testDatabaseNameFromUrl(connectionString));
@@ -36,6 +38,7 @@ export default async function setup() {
     const { rows } = await client.query<{ name: string }>("SELECT current_database() AS name");
     reportRefusal(() => assertTestDatabaseName(rows[0].name));
     await migrate(drizzle(client), { migrationsFolder: "./drizzle" });
+    await client.query(TEST_CLOCK_SETUP_SQL);
   } finally {
     await client.end();
   }

@@ -70,7 +70,9 @@ describe("testDatabaseNameFromUrl", () => {
 
 describe("test database wiring", () => {
   it("connects the app's db client to the database named by TEST_DATABASE_URL", async () => {
-    expect(process.env.DATABASE_URL).toBe(process.env.TEST_DATABASE_URL);
+    // Same database; the app's URL may carry extra connection options (the test clock's search_path).
+    const pathOf = (value: string | undefined) => new URL(value!).pathname;
+    expect(pathOf(process.env.DATABASE_URL)).toBe(pathOf(process.env.TEST_DATABASE_URL));
     await expect(assertConnectedToTestDatabase()).resolves.toBeUndefined();
   });
 });
