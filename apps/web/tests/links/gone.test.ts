@@ -95,6 +95,8 @@ describe("serveGone", () => {
   it("fetches each page once per process in production, and again after a failure", async () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("SAFE_BROWSING_API_KEY", "test-only");
+    // The test config points BASE_URL and DATABASE_URL at localhost.
+    vi.stubEnv("ALLOW_LOCAL_PRODUCTION", "1");
     const { serveGone: serve } = await import("@/lib/middleware/utils/serve-gone");
     vi.spyOn(console, "error").mockImplementation(() => {});
     const fetch = stubGonePages().mockRejectedValueOnce(new Error("not up yet"));

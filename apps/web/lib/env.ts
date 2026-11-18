@@ -34,7 +34,8 @@ const DEV_ISSUE_RATE_LIMIT_WINDOW_SECONDS = 60;
 /**
  * - `build`: `next build` (Next sets NEXT_PHASE during it, and build workers inherit it). CI builds
  *   without DATABASE_URL on purpose, so missing values are tolerated.
- * - `runtime`: `next start` or any other production process. Missing required values are errors.
+ * - `runtime`: `next start` or any other production process. Missing required values are errors,
+ *   and so are local URLs (see `ALLOW_LOCAL_PRODUCTION`).
  * - `lenient`: dev and tests. Missing values fall back to local defaults.
  *
  * The literal below is `PHASE_PRODUCTION_BUILD` from `next/constants`; it is inlined to keep this
@@ -44,6 +45,74 @@ export function resolveMode(source: EnvSource): EnvMode {
   if (source.NEXT_PHASE === "phase-production-build") return "build";
   if (source.NODE_ENV === "production") return "runtime";
   return "lenient";
+}
+
+/**
+ * Opt-in for running a production build on this machine (`next build && next start`), where
+ * BASE_URL and DATABASE_URL point to localhost. Only the exact value "1" enables it, and it is
+ * refused whenever Vercel's system variables are present, so it cannot weaken a real deployment.
+ */
+const ALLOW_LOCAL_PRODUCTION = "ALLOW_LOCAL_PRODUCTION";
+const LOCAL_HINT = `(${ALLOW_LOCAL_PRODUCTION}=1 allows this outside Vercel, for a local production run)`;
+
+// Vercel system variables, present in its Production and Preview deployments at build and runtime.
+function isOnVercel(source: EnvSource): boolean {
+  return Boolean(source.VERCEL || source.VERCEL_ENV);
+}
+
+/**
+ * True for names that reach this machine: localhost and *.localhost, 127.0.0.0/8, 0.0.0.0, ::1, ::
+ * and the IPv4-mapped forms of those. Parsing as an http URL first canonicalizes spellings such as
+ * 127.1, 0x7f.0.0.1, 2130706433 and 0:0:0:0:0:0:0:1.
+ */
+function isLocalHost(host: string): boolean {
+  let name = host.toLowerCase();
+  const bracketed = name.includes(":") && !name.startsWith("[") ? `[${name}]` : name;
+  try {
+    name = new URL(`http://${bracketed}`).hostname;
+  } catch {
+    // Not a valid http host: compare the raw name.
+  }
+  name = name.replace(/^\[(.*)\]$/, "$1").replace(/\.$/, "");
+  return (
+    name === "localhost" ||
+    name.endsWith(".localhost") ||
+    /^127\.\d+\.\d+\.\d+$/.test(name) ||
+    name === "0.0.0.0" ||
+    name === "::1" ||
+    name === "::" ||
+    /^::ffff:(7f[0-9a-f]{2}:[0-9a-f]{1,4}|0:0)$/.test(name)
+  );
+}
+
+/**
+ * The server host node-postgres would connect to, read the way it reads a connection string: a
+ * `host` query parameter wins over the authority, an empty host stays empty (the driver then uses
+ * its local default) and a leading "/" is a Unix socket directory. Undefined when unparseable.
+ * Parse errors are discarded, never surfaced: they could echo the password.
+ */
+function databaseHost(raw: string): string | undefined {
+  let url: URL;
+  let emptyAuthorityHost = false;
+  try {
+    url = new URL(raw);
+  } catch {
+    try {
+      // `postgres://user:pass@/db?host=...` has credentials but no host, which URL rejects.
+      url = new URL(raw.replace("@/", "@placeholder.invalid/"));
+      emptyAuthorityHost = true;
+    } catch {
+      return undefined;
+    }
+  }
+  const fromQuery = url.searchParams.get("host");
+  if (fromQuery) return fromQuery;
+  if (emptyAuthorityHost) return "";
+  try {
+    return decodeURIComponent(url.hostname.replace(/^\[(.+)\]$/, "$1"));
+  } catch {
+    return undefined;
+  }
 }
 
 // Treat an empty string (`BASE_URL=` in a .env file) as unset.
@@ -88,8 +157,43 @@ const baseUrlValue = z.string().transform((raw, ctx) => {
 
 const databaseUrlValue = z
   .string()
-  // Deliberately not parsed with `new URL()`: a parse error message could echo the secret.
+  // Shape only, via a regex: a parser's error message could echo the secret. The production host
+  // check parses it separately and discards any parse error.
   .regex(/^postgres(ql)?:\/\//, { error: "must start with postgres:// or postgresql://" });
+
+// Production-only rules, applied after the shape checks above. `allowLocal` lifts them.
+function productionBaseUrl(allowLocal: boolean) {
+  return z.string().superRefine((value, ctx) => {
+    if (allowLocal) return;
+    const url = new URL(value);
+    if (url.protocol !== "https:") {
+      ctx.addIssue({ code: "custom", message: `must use https in production ${LOCAL_HINT}` });
+    }
+    if (isLocalHost(url.hostname)) {
+      ctx.addIssue({
+        code: "custom",
+        message: `must not point to localhost or a loopback address in production ${LOCAL_HINT}`,
+      });
+    }
+  });
+}
+
+function productionDatabaseUrl(allowLocal: boolean) {
+  return z.string().superRefine((value, ctx) => {
+    const host = databaseHost(value);
+    if (host === undefined) {
+      ctx.addIssue({ code: "custom", message: "must be a valid connection URL" });
+      return;
+    }
+    if (allowLocal) return;
+    if (host === "" || host.startsWith("/") || isLocalHost(host)) {
+      ctx.addIssue({
+        code: "custom",
+        message: `must not point to localhost, a loopback address or a Unix socket in production ${LOCAL_HINT}`,
+      });
+    }
+  });
+}
 
 const timeZoneValue = z.string().refine(
   (value) => {
@@ -128,11 +232,22 @@ const positiveIntValue = z
       .max(INT4_MAX - 1, { error: "is too large" }),
   );
 
-function buildSchema(mode: EnvMode) {
+type SchemaContext = { onVercel: boolean; allowLocal: boolean };
+
+function buildSchema(mode: EnvMode, { onVercel, allowLocal }: SchemaContext) {
   const baseUrl =
-    mode === "runtime" ? requiredWhen(mode, "BASE_URL").pipe(baseUrlValue) : baseUrlValue;
+    mode === "runtime"
+      ? requiredWhen(mode, "BASE_URL").pipe(baseUrlValue).pipe(productionBaseUrl(allowLocal))
+      : baseUrlValue;
   const databaseUrl =
-    mode === "runtime" ? requiredWhen(mode, "DATABASE_URL").pipe(databaseUrlValue) : databaseUrlValue;
+    mode === "runtime"
+      ? requiredWhen(mode, "DATABASE_URL")
+          .pipe(databaseUrlValue)
+          .pipe(productionDatabaseUrl(allowLocal))
+      : databaseUrlValue;
+  const allowLocalProduction = z
+    .literal("1", { error: "must be 1 or unset" })
+    .refine(() => mode === "lenient" || !onVercel, { error: "must not be set on Vercel" });
 
   return z.object({
     BASE_URL: z.preprocess(
@@ -168,6 +283,7 @@ function buildSchema(mode: EnvMode) {
         ? requiredWhen(mode, "ISSUE_RATE_LIMIT_WINDOW_SECONDS").pipe(positiveIntValue)
         : positiveIntValue.default(DEV_ISSUE_RATE_LIMIT_WINDOW_SECONDS),
     ),
+    [ALLOW_LOCAL_PRODUCTION]: z.preprocess(emptyAsUnset, allowLocalProduction.optional()),
   });
 }
 
@@ -177,7 +293,9 @@ function buildSchema(mode: EnvMode) {
  * SAFE_BROWSING_API_KEY and RATE_LIMIT_SECRET are secrets.
  */
 export function parseEnv(source: EnvSource, mode: EnvMode): Env {
-  const result = buildSchema(mode).safeParse({
+  const onVercel = isOnVercel(source);
+  const allowLocal = mode === "runtime" && !onVercel && source[ALLOW_LOCAL_PRODUCTION] === "1";
+  const result = buildSchema(mode, { onVercel, allowLocal }).safeParse({
     BASE_URL: source.BASE_URL,
     DATABASE_URL: source.DATABASE_URL,
     APP_TIME_ZONE: source.APP_TIME_ZONE,
@@ -185,12 +303,16 @@ export function parseEnv(source: EnvSource, mode: EnvMode): Env {
     RATE_LIMIT_SECRET: source.RATE_LIMIT_SECRET,
     ISSUE_RATE_LIMIT_MAX: source.ISSUE_RATE_LIMIT_MAX,
     ISSUE_RATE_LIMIT_WINDOW_SECONDS: source.ISSUE_RATE_LIMIT_WINDOW_SECONDS,
+    [ALLOW_LOCAL_PRODUCTION]: source[ALLOW_LOCAL_PRODUCTION],
   });
   if (!result.success) {
     const lines = result.error.issues.map((issue) => `- ${issue.path.join(".")}: ${issue.message}`);
     throw new Error(`Invalid environment variables:\n${lines.join("\n")}`);
   }
-  return result.data as Env;
+  // The opt-in is validated above but is not part of Env.
+  return Object.fromEntries(
+    Object.entries(result.data).filter(([key]) => key !== ALLOW_LOCAL_PRODUCTION),
+  ) as Env;
 }
 
 let cached: Env | undefined;
