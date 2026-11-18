@@ -1,6 +1,7 @@
 "use server";
 
 import { headers } from "next/headers";
+import { type FormState, withSubmitted } from "@/lib/actions/issue-form-state";
 import { type IssueResult, issueShortUrl } from "@/lib/links/issue-link";
 import { getClientIp } from "@/lib/rate-limit/client-key";
 
@@ -24,4 +25,13 @@ export async function issueAction(_prev: IssueState, formData: FormData): Promis
     default:
       return { ok: false, message: result.message };
   }
+}
+
+/**
+ * The home page form's action as a plain form post: the form submits to it before the page is
+ * hydrated (or when JavaScript never loads), and the page is rendered with the returned state.
+ * The previous state is ignored.
+ */
+export async function issueFormAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  return withSubmitted(await issueAction(null, formData), formData);
 }

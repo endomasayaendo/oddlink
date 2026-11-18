@@ -9,8 +9,9 @@ import { UrlForm } from "@/ui/links/url-form";
 
 const { issueAction } = vi.hoisted(() => ({ issueAction: vi.fn<(prev: IssueState, formData: FormData) => Promise<IssueState>>() }));
 
-// The real action talks to the database; the UI only needs its result.
-vi.mock("@/lib/actions/issue-link", () => ({ issueAction }));
+// The real action talks to the database; the UI only needs its result. The form-post action is
+// only used before hydration, which these tests never see.
+vi.mock("@/lib/actions/issue-link", () => ({ issueAction, issueFormAction: vi.fn() }));
 
 const SHORT_URL = "http://localhost:3000/abc";
 

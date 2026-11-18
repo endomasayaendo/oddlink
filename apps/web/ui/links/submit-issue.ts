@@ -1,10 +1,8 @@
 import { unstable_rethrow } from "next/navigation";
 import type { IssueState } from "@/lib/actions/issue-link";
+import { type FormState, withSubmitted } from "@/lib/actions/issue-form-state";
 
-type IssueFailure = Extract<NonNullable<IssueState>, { ok: false }>;
-
-// Client-only: failures also carry the submitted URL so the input can be restored.
-export type FormState = Exclude<IssueState, IssueFailure> | (IssueFailure & { submitted: string });
+export type { FormState };
 
 type IssueActionFn = (prev: IssueState, formData: FormData) => Promise<IssueState>;
 
@@ -29,9 +27,5 @@ export async function submitIssue(action: IssueActionFn, formData: FormData): Pr
     console.error(error);
     next = { ok: false, message: ACTION_FAILED_MESSAGE };
   }
-  if (next && !next.ok) {
-    const submitted = formData.get("originalUrl");
-    return { ...next, submitted: typeof submitted === "string" ? submitted : "" };
-  }
-  return next;
+  return withSubmitted(next, formData);
 }

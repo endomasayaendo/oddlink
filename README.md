@@ -90,7 +90,7 @@ If the port is taken, or `pnpm db:up` complains that the name `oddlink-db` is in
 
 | Route | What it does |
 |---|---|
-| `/` | Shorten a URL (Server Action) and see your recent links (stored in `localStorage`) |
+| `/` | Shorten a URL (Server Action) and see your recent links (stored in `localStorage`). Before the page hydrates (or without JavaScript) the form is a plain `POST /` and the page comes back with the result |
 | `POST /api/issue` | Shorten a URL from anywhere else (see below) |
 | `GET /{shortCode}` | Handled in `proxy.ts`: counts and logs the access in one SQL statement, then `302`s to the original URL (`503` if that write fails). Unknown or expired codes get a real `404`; disabled or deleted links get `410 Gone` (a static page, `no-store`, `noindex`, never the destination) |
 | `GET /{shortCode}+` | Preview page (rewritten to `/preview/{shortCode}`): shows the destination host and full address, created / expires dates and total clicks, and a "Continue" button that goes through the short link itself. Viewing it never counts as a click. Unknown, unusable or malformed codes get a real `404`; disabled or deleted links get `410 Gone`; expired links get a page with an "Expired" banner and no button. `no-store`, `noindex`. A transparency feature for the person holding the link, not an abuse filter |
@@ -125,7 +125,7 @@ Setting up the key: create an API key in the Google Cloud console with the Safe 
 
 Issuing links is rate-limited in two layers ([ADR 0004](docs/adr/0004-rate-limiting.md)):
 
-1. **Vercel WAF** (deploy-time, coarse): a rate-limit rule keyed by IP on `POST /api/issue` and on Server Action POSTs to `/` (requests carrying a `Next-Action` header). Thresholds are set only in the Vercel dashboard. How many rules the Hobby plan allows is Unverified.
+1. **Vercel WAF** (deploy-time, coarse): a rate-limit rule keyed by IP on `POST /api/issue` and on all `POST /` requests: Server Action calls carry a `Next-Action` header, but a form submitted before the page hydrates (or without JavaScript) is a plain multipart POST without it, so a rule that only matches the header misses those. Thresholds are set only in the Vercel dashboard. How many rules the Hobby plan allows is Unverified.
 2. **App limiter** (final check, `apps/web/lib/rate-limit/`): a per-client fixed window counted in Postgres (`rate_limits`), shared by the form and the API. Invalid URLs are not counted; URLs Safe Browsing refuses are. Over the limit, the API answers `429` with `Retry-After` and the form shows a message. If the limiter's database query fails, the link is issued anyway (fail open). Thresholds come from `ISSUE_RATE_LIMIT_MAX` / `ISSUE_RATE_LIMIT_WINDOW_SECONDS`. Like `SAFE_BROWSING_API_KEY`, these and `RATE_LIMIT_SECRET` must be set for every environment that runs `next start` (on Vercel, Preview as well as Production), or the server refuses to start.
 
 The client is identified by `x-real-ip`, else the first `x-forwarded-for` entry (IPv6 grouped by /64), stored only as an HMAC with `RATE_LIMIT_SECRET`, never as a raw address. This relies on the proxy in front overwriting those headers, as Vercel's edge does; a self-hosted deployment must put a reverse proxy in front that overwrites `X-Forwarded-For` / `X-Real-IP`.
