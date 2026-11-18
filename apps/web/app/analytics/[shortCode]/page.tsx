@@ -7,6 +7,7 @@ import { getAnalytics } from "@/lib/analytics/get-analytics";
 import { formatDate } from "@/lib/format-date";
 import { shortCodeFromParams } from "@/lib/links/short-code-param";
 import { FLAGGED_REASON, isFlagged } from "@/lib/links/gone";
+import { Destination } from "@/ui/analytics/destination";
 import { StatCard } from "@/ui/analytics/stat-card";
 
 // "2026-01-02" -> "Jan 2"; the date is already in APP_TIME_ZONE, so format it as UTC.
@@ -55,17 +56,7 @@ async function AnalyticsContent({ params }: Pick<PageProps<"/analytics/[shortCod
         >
           {data.shortUrl}
         </a>
-        {/* Null when the link was disabled by anyone but its owner: the destination stays hidden. */}
-        {data.originalUrl !== null && (
-          <a
-            href={data.originalUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="block text-[0.8rem] break-all text-ink-muted"
-          >
-            {data.originalUrl}
-          </a>
-        )}
+        <Destination originalUrl={data.originalUrl} originalHref={data.originalHref} />
       </div>
 
       {data.state === "disabled" && (

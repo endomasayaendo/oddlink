@@ -36,6 +36,7 @@ describe("getAnalytics", () => {
       shortCode: "stats-code",
       shortUrl: "http://localhost:3000/stats-code",
       originalUrl: "https://example.com",
+      originalHref: "https://example.com/",
       totalAccessCount: 3,
       createdAt: link.createdAt,
       expiresAt: null,
@@ -120,6 +121,39 @@ describe("getAnalytics", () => {
         totalAccessCount: 3,
       });
     }
+  });
+
+  it.each(["https://google.com@evil.example", "https://u:p@example.com", "javascript:alert(1)", "not a url"])(
+    "keeps %s as text but gives no href, since the redirect would refuse it",
+    async (originalUrl) => {
+      await insertLink({ originalUrl });
+      expect(await liveAnalytics("stats-code")).toMatchObject({ originalUrl, originalHref: null });
+    },
+  );
+
+  it("gives the href the redirect would use", async () => {
+    await insertLink({ originalUrl: "https://example.com/a b" });
+    expect(await liveAnalytics("stats-code")).toMatchObject({
+      originalUrl: "https://example.com/a b",
+      originalHref: "https://example.com/a%20b",
+    });
+  });
+
+  it("applies the redirect check to an owner-disabled link's destination", async () => {
+    for (const [code, originalUrl, originalHref] of [
+      ["owner-ok", "https://example.com/ok", "https://example.com/ok"],
+      ["owner-userinfo", "https://u@example.com", null],
+    ] as const) {
+      await insertLink({ shortCode: code, originalUrl });
+      await db.execute(sql`UPDATE url_mappings SET disabled_at = now(), disabled_by = 'owner' WHERE short_code = ${code}`);
+      expect(await getAnalytics(code)).toMatchObject({ state: "disabled", originalUrl, originalHref });
+    }
+  });
+
+  it("gives no href when the destination is hidden", async () => {
+    await insertLink();
+    await db.execute(sql`UPDATE url_mappings SET disabled_at = now(), disabled_by = 'operator' WHERE short_code = 'stats-code'`);
+    expect(await getAnalytics("stats-code")).toMatchObject({ state: "disabled", originalUrl: null, originalHref: null });
   });
 
   it("returns only the code for a deleted link", async () => {
