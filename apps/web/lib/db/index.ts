@@ -52,11 +52,14 @@ export function createPool(env: Env = getEnv()): Pool {
   return pool;
 }
 
-// Reuse the pool across dev hot reloads so connections don't pile up (and the listeners are only
-// attached on creation). A reused dev pool keeps its old options until `next dev` restarts.
+// One pool per process, kept on `globalThis` in every environment. Under `next start` the proxy and
+// the app routes are separate bundles that each evaluate this module, so a module-level pool would
+// exist twice; in `next dev` a hot reload re-evaluates it. Only the first evaluation creates the
+// pool and attaches its listeners. A reused pool keeps its options until the process restarts.
 const globalForDb = globalThis as unknown as { pool?: Pool };
 
-const pool = globalForDb.pool ?? createPool();
-if (process.env.NODE_ENV !== "production") globalForDb.pool = pool;
+export function sharedPool(create: () => Pool = createPool): Pool {
+  return (globalForDb.pool ??= create());
+}
 
-export const db = drizzle(pool, { schema });
+export const db = drizzle(sharedPool(), { schema });
