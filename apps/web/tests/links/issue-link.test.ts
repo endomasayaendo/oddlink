@@ -162,6 +162,24 @@ describe("issueShortUrl", () => {
     expect(checkUrl).not.toHaveBeenCalled();
   });
 
+  it("refuses URLs that point at this site's own short links without counting or inserting", async () => {
+    const rateLimit = vi.fn(async () => ({ allowed: true as const }));
+    const checkUrl = vi.fn(async () => "safe" as const);
+    const result = await issueShortUrl("HTTP://LOCALHOST.:3000/taken-code", { rateLimit, checkUrl });
+    expect(result).toEqual({
+      ok: false,
+      status: 400,
+      message: "URLs that point to this site's own short links are not allowed",
+    });
+    expect(rateLimit).not.toHaveBeenCalled();
+    expect(checkUrl).not.toHaveBeenCalled();
+    expect(await db.$count(urlMappings)).toBe(0);
+  });
+
+  it("still issues links to other ports on the same host", async () => {
+    expect(await issueShortUrl("http://localhost:4000/app")).toMatchObject({ ok: true });
+  });
+
   describe("rate limit", () => {
     const rejected = async () => ({ allowed: false as const, retryAfterSeconds: 42 });
 

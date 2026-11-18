@@ -1,15 +1,18 @@
 import { sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { SHORT_CODE_MAX_LENGTH, urlMappings } from "@/lib/db/schema";
-import { shortUrlFor } from "@/lib/constants";
+import { BASE_URL, shortUrlFor } from "@/lib/constants";
 import { generatePhrase } from "@oddlink/utils";
 import { originalUrlSchema } from "@/lib/zod/schemas/links";
 import { getWords } from "./get-words";
 import { checkUrlSafety, type SafetyVerdict } from "./safe-browsing";
 import { UNSAFE_URL_MESSAGE } from "./safe-browsing/advisory";
 import { checkIssueRateLimit, type RateLimitVerdict } from "@/lib/rate-limit";
+import { pointsAtOwnShortLinks } from "./url-safety";
 
 const MAX_ATTEMPTS = 5;
+
+export const OWN_SHORT_LINK_MESSAGE = "URLs that point to this site's own short links are not allowed";
 
 export const RATE_LIMITED_MESSAGE = "You're creating links too quickly. Please try again in a few minutes.";
 
@@ -32,7 +35,7 @@ type Options = {
 const defaultGenerate = async () => generatePhrase(await getWords());
 
 /**
- * Validates the URL, applies the per-client rate limit (invalid input is not counted; unsafe URLs are),
+ * Validates the URL (refusing ones that point at this app's own short links, which could form a redirect loop), applies the per-client rate limit (invalid input is not counted; unsafe URLs are),
  * refuses ones Google Safe Browsing flags (failing open when it can't tell),
  * and stores it under a fresh phrase, regenerating on collisions and on phrases too long for the short_code column. Both share MAX_ATTEMPTS.
  */
@@ -45,6 +48,9 @@ export async function issueShortUrl(
     return { ok: false, status: 400, message: parsed.error.issues[0].message };
   }
   const originalUrl = parsed.data;
+  if (pointsAtOwnShortLinks(new URL(originalUrl), BASE_URL)) {
+    return { ok: false, status: 400, message: OWN_SHORT_LINK_MESSAGE };
+  }
 
   // try/await rather than .catch(): a limiter that throws synchronously must fail open too.
   let limit: RateLimitVerdict;
