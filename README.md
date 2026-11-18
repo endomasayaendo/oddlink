@@ -111,9 +111,9 @@ curl -X POST http://localhost:3000/api/issue \
 }
 ```
 
-The request must be sent with `Content-Type: application/json` (a `charset` parameter is fine); anything else gets `415` before the body is read or the request counts toward the rate limit.
+The request must be sent with `Content-Type: application/json` (a `charset` parameter is fine); anything else gets `415` before the body is read or the request counts toward the rate limit. The body may be at most 16 KiB; a larger one gets `413`, checked from `Content-Length` when present and by stopping the read once the limit is passed otherwise, also before the request counts toward the rate limit.
 
-Errors return `{"message": "..."}`: `400` for a blank or invalid URL (only `http`/`https` are accepted), `422` if Google Safe Browsing flags the URL (the body also carries `"advisory": "Advisory provided by Google"` and `"advisoryUrl"`), `429` with a `Retry-After` header (seconds) when the client has issued too many links recently (see [Rate limiting](#rate-limiting)), `503` if no unique phrase could be generated.
+Errors return `{"message": "..."}`: `400` for a blank or invalid URL (only `http`/`https` are accepted), `413` if the body is larger than 16 KiB, `415` if the `Content-Type` is not JSON, `422` if Google Safe Browsing flags the URL (the body also carries `"advisory": "Advisory provided by Google"` and `"advisoryUrl"`), `429` with a `Retry-After` header (seconds) when the client has issued too many links recently (see [Rate limiting](#rate-limiting)), `503` if no unique phrase could be generated.
 
 ### Safe Browsing check
 
