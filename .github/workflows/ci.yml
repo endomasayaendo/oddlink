@@ -50,6 +50,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm typecheck
+      # The runner has Docker, so the container tests run here instead of being skipped.
+      - run: pnpm test:scripts
       - name: Check migrations match schema.ts
         run: |
           pnpm --filter web exec drizzle-kit generate

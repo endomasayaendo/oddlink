@@ -40,6 +40,8 @@ const drizzleStatus = () => capture("git", ["status", "--porcelain", "apps/web/d
 const stages = [
   { name: "lint", args: ["lint"] },
   { name: "typecheck", args: ["typecheck"] },
+  // Its Docker tests use their own throwaway container (no published port), never `oddlink-db`.
+  { name: "test:scripts", args: ["test:scripts"] },
   {
     name: "schema",
     args: ["--filter", "web", "exec", "drizzle-kit", "generate"],

@@ -68,7 +68,7 @@ To stop, press Ctrl+C in the terminal running the dev server, or run `pnpm stop`
 
 The `oddlink-db` container is shared by every checkout and worktree on this machine, so stopping it also takes Postgres away from them (their dev servers and tests fail until it is started again). Use `pnpm stop --keep-db` to stop only the dev server.
 
-Before opening a pull request, run `pnpm verify`: it runs what CI runs, in the same order (`lint` → `typecheck` → migrations match `schema.ts` → `build` without `DATABASE_URL` → `test`) and stops at the first failure. CI also smoke-tests the production build, which `pnpm verify` skips; to run it locally, build first and point it at a database that does not exist yet (it is created and migrated): `SMOKE_DATABASE_URL=postgres://postgres:postgres@localhost:5432/oddlink_smoke node scripts/ci-smoke.mjs`. It needs Postgres running (`pnpm bootstrap` or `pnpm db:up`) and never starts anything itself.
+Before opening a pull request, run `pnpm verify`: it runs what CI runs, in the same order (`lint` → `typecheck` → `test:scripts` → migrations match `schema.ts` → `build` without `DATABASE_URL` → `test`) and stops at the first failure. CI also smoke-tests the production build, which `pnpm verify` skips; to run it locally, build first and point it at a database that does not exist yet (it is created and migrated): `SMOKE_DATABASE_URL=postgres://postgres:postgres@localhost:5432/oddlink_smoke node scripts/ci-smoke.mjs`. It needs Postgres running (`pnpm bootstrap` or `pnpm db:up`) and never starts anything itself.
 
 ### Manual setup
 
@@ -191,17 +191,17 @@ Run from the repository root; Turborepo runs each task in every package that def
 |---|---|
 | `pnpm bootstrap` | Start: one-command local setup (see [Getting Started](#getting-started)); `--no-dev` skips starting the dev server |
 | `pnpm stop` | Stop: the dev server started by `pnpm bootstrap`, then the `oddlink-db` container (data kept); `--keep-db` leaves the database running |
-| `pnpm verify` | Run the CI checks locally: lint, typecheck, migrations match the schema, build (without `DATABASE_URL`), test. Needs Postgres running |
+| `pnpm verify` | Run the CI checks locally: lint, typecheck, script tests, migrations match the schema, build (without `DATABASE_URL`), test. Needs Postgres running |
 | `pnpm dev` / `build` / `start` | Next.js dev server / production build / production server |
 | `pnpm lint` / `typecheck` | Lint (fails on warnings; covers every package and `scripts/`) / type check |
 | `pnpm test` | Run tests (needs `db:up`; creates `oddlink_test` automatically) |
-| `pnpm test:scripts` | Test `scripts/stop.mjs` (uses a throwaway container; the Docker tests are skipped if Docker is not running) |
+| `pnpm test:scripts` | Test `scripts/stop.mjs` (also run by `pnpm verify` and CI). The Docker tests use their own throwaway container, never `oddlink-db`, and are skipped if Docker is not running |
 | `pnpm db:up` / `db:down` | Create and start Postgres / remove the container (the data volume is kept) |
 | `pnpm db:generate` | Generate a migration after changing `apps/web/lib/db/schema.ts` |
 | `pnpm db:migrate` | Apply migrations |
 | `pnpm --filter web link:disable` / `link:enable` / `link:delete` `<code>` | Operator commands (see [Operator commands](#operator-commands)) |
 
-CI (GitHub Actions) runs lint, typecheck, a check that the committed migrations match `schema.ts`, build, a smoke test of the production server (`scripts/ci-smoke.mjs`) and test on every pull request and push to `main`.
+CI (GitHub Actions) runs lint, typecheck, the script tests (`pnpm test:scripts`), a check that the committed migrations match `schema.ts`, build, a smoke test of the production server (`scripts/ci-smoke.mjs`) and test on every pull request and push to `main`.
 
 ### Operator commands
 
