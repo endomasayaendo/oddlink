@@ -35,6 +35,16 @@ describe("ErrorMessage", () => {
     expect(screen.getByRole("button", { name: "Close" })).toBeTruthy();
   });
 
+  it("puts messageId on the message and its extra content, not on the dismiss button", () => {
+    render(
+      <ErrorMessage message="Something broke" messageId="err" onDismiss={() => {}}>
+        <span> More</span>
+      </ErrorMessage>,
+    );
+
+    expect(document.getElementById("err")?.textContent).toBe("Something broke More");
+  });
+
   it("returns focus to the element that was focused when it appeared", () => {
     render(<Harness />);
     const trigger = screen.getByRole("button", { name: "Copy" });
