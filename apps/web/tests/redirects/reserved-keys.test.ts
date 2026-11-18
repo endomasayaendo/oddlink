@@ -30,7 +30,7 @@ function singleSegmentRoutes(): string[] {
 describe("RESERVED_KEYS", () => {
   it("covers every single-segment route in app/, so the proxy never hides a page", () => {
     const routes = singleSegmentRoutes();
-    expect(routes).toEqual(expect.arrayContaining(["not-found", "favicon.ico"]));
+    expect(routes).toEqual(expect.arrayContaining(["not-found", "favicon.ico", "robots.txt"]));
     for (const route of routes) expect(RESERVED_KEYS).toContain(route);
   });
 });

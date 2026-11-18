@@ -145,7 +145,7 @@ describe("proxy redirects", () => {
     ["DEL", "/%7F"],
     ["a key over 255 characters", `/${"a".repeat(256)}`],
     ["a key over 255 code points", `/${encodeURIComponent("😀".repeat(256))}`],
-    ["a file name", "/robots.txt"],
+    ["a file name", "/sitemap.xml"],
     ["a dotted key", "/foo.bar"],
     ["an icon path", "/apple-touch-icon.png"],
   ])("serves the 404 page for %s without touching the database", async (_, path) => {
@@ -358,7 +358,7 @@ describe("proxy preview", () => {
     expect(await logsOf(link.id)).toBe(0);
   });
 
-  it.each(["/not-found+", "/favicon.ico+"])("serves the 404 page for %s instead of passing it on", async (path) => {
+  it.each(["/not-found+", "/favicon.ico+", "/robots.txt+"])("serves the 404 page for %s instead of passing it on", async (path) => {
     expectNotFound(await request(path).res);
   });
 
@@ -436,7 +436,7 @@ describe("proxy preview", () => {
 });
 
 describe("proxy pass-through", () => {
-  it.each(["/", "/not-found", "/favicon.ico", "/a/b"])(
+  it.each(["/", "/not-found", "/favicon.ico", "/robots.txt", "/a/b"])(
     "lets %s reach the app",
     async (path) => {
       expect(passesThrough(await request(path).res)).toBe(true);

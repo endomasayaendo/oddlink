@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
+import { BASE_URL } from "@/lib/constants";
 import { fontVariables } from "./fonts";
 import "./globals.css";
 
 export const metadata: Metadata = {
+  metadataBase: new URL(BASE_URL),
   title: "OddLink - Where links get odd",
   description: "A URL shortener that generates surreal English phrases as short codes.",
 };
