@@ -1,4 +1,3 @@
-import { LineChart } from "@oddlink/ui/charts";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -7,6 +6,7 @@ import { getAnalytics } from "@/lib/analytics/get-analytics";
 import { formatDate } from "@/lib/format-date";
 import { shortCodeFromParams } from "@/lib/links/short-code-param";
 import { FLAGGED_REASON, isFlagged } from "@/lib/links/gone";
+import { DailyClicksChart } from "@/ui/analytics/daily-clicks-chart";
 import { StatCard } from "@/ui/analytics/stat-card";
 
 // "2026-01-02" -> "Jan 2"; the date is already in APP_TIME_ZONE, so format it as UTC.
@@ -86,8 +86,9 @@ async function AnalyticsContent({ params }: Pick<PageProps<"/analytics/[shortCod
           is cast up and to the left, toward a light that isn't there. */}
       <div className="mb-8 rounded-wobble border-2 border-ink bg-paper-light p-4 shadow-[-4px_-4px_0_var(--color-ink-strong)] sm:p-6">
         <p className="mb-4 font-display font-semibold text-ink">Daily Clicks</p>
+        {/* No chart (and none of its code) for a link nobody has clicked yet. */}
         {chartData.length > 0 ? (
-          <LineChart data={chartData} xKey="date" yKey="count" />
+          <DailyClicksChart days={chartData} />
         ) : (
           <p className="py-8 text-center text-ink-muted">No access data yet</p>
         )}
