@@ -15,7 +15,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "recharts": "^3.10.1"
+    "recharts": "^3.11.0"
   },
   "devDependencies": {
     "@oddlink/tailwind-config": "workspace:*",
@@ -30,7 +30,7 @@
     "react": "19.3.1",
     "react-dom": "19.3.1",
     "typescript": "^5.9.3",
-    "vitest": "^5.1.0"
+    "vitest": "^5.1.1"
   },
   "peerDependencies": {
     "react": "19.3.1",
